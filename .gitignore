@@ -1,2 +1,11 @@
+# node_modules & 환경변수 파일
 node_modules/
 .env
+
+# React
+client/node_modules/
+client/build/
+
+# 서버
+server/node_modules/
+server/.env
