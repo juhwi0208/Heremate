@@ -8,6 +8,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
+
 // DB 연결 설정
 const db = mysql.createConnection({
   host: process.env.DB_HOST,
@@ -38,3 +40,7 @@ app.listen(PORT, () => {
 
 const authRoutes = require('./routes/auth');
 app.use('/api', authRoutes);
+
+
+
+
