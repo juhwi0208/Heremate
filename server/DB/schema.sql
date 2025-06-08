@@ -1,17 +1,15 @@
 CREATE DATABASE IF NOT EXISTS heremate;
 USE heremate;
 
-ALTER TABLE users ADD COLUMN kakao_id VARCHAR(255);
 
+DROP TABLE IF EXISTS users;
 -- 1. 사용자 테이블
 CREATE TABLE users (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password VARCHAR(255) NOT NULL,
-  nickname VARCHAR(100),
-  age INT,
-  gender ENUM('male', 'female', 'other'),
-  preferences TEXT,
+  email VARCHAR(255) ,
+  password VARCHAR(255),
+  nickname VARCHAR(100) NOT null,
+  kakao_id VARCHAR(255) UNIQUE;
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
