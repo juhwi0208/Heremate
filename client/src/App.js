@@ -1,20 +1,41 @@
-// src/pages/App.js
-import React from 'react';
+// client/src/App.js
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Login from './pages/Login';
-import KakaoCallback from './pages/KakaoCallback';
+import { jwtDecode } from 'jwt-decode'; 
+
+
+import Header from './components/Header';
 import Home from './pages/Home';
-import Signup from './pages/Signup';
+import SignUp from './pages/SignUp';
+import KakaoRedirectHandler from './pages/KakaoRedirectHandler';
+import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 
 function App() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const decoded = jwtDecode(token);
+        setUser({ id: decoded.id, nickname: decoded.nickname });
+      } catch (err) {
+        console.error('토큰 디코딩 실패', err);
+        localStorage.removeItem('token');
+      }
+    }
+  }, []);
+
   return (
     <Router>
+      <Header user={user} setUser={setUser} />
       <Routes>
-        <Route path="/" element={<Home />} />               {/* 홈 */}
-        <Route path="/signup" element={<Signup />} />       {/* 회원가입 */}
-        <Route path="/login" element={<Login />} />         {/* 로그인 페이지 */}
-        <Route path="/kakao/callback" element={<KakaoCallback />} />
-        <Route path="/home" element={<div>로그인 완료! 홈입니다.</div>} />  {/* 로그인 후 이동 */}
+        <Route path="/" element={<Home />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/login" element={<Login setUser={setUser} />} />
+        <Route path="/signup" element={<SignUp setUser={setUser} />} />
+        <Route path="/auth/kakao/callback" element={<KakaoRedirectHandler setUser={setUser} />} />
       </Routes>
     </Router>
   );
