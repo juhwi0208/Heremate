@@ -1,12 +1,11 @@
-//C:\Users\owner\Documents\GitHub\Heremate\client\src\pages\Signup.js
-
+//C:\Users\owner\Documents\GitHub\Heremate\client\src\pages\SignUp.js
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import axios from 'axios';
 
-function Signup() {
+function SignUp() {
   const location = useLocation();
   const navigate = useNavigate();
   const [emailCheck, setEmailCheck] = useState({ checked: false, valid: false });
@@ -162,6 +161,6 @@ function Signup() {
   );
 }
 
-export default Signup;
+export default SignUp;
 
 

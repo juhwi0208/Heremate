@@ -8,15 +8,15 @@ const { findOrCreateUser } = require('../models/userModel');
 const JWT_SECRET = process.env.JWT_SECRET;
 const SALT_ROUNDS = 10;
 
+
 exports.kakaoCallback = async (req, res) => {
   const { code } = req.query;
-    
 
   try {
     const kakaoUser = await getKakaoUserInfo(code);
     const user = await findOrCreateUser(kakaoUser);
 
-    const token = jwt.sign({ id: user.id, nickname: user.nickname }, JWT_SECRET, {
+    const token = jwt.sign({ id: user.id, nickname: user.nickname, role: user.role }, JWT_SECRET, {
       expiresIn: '7d',
     });
 
@@ -76,9 +76,8 @@ exports.login = async (req, res) => {
 
   try {
     const connection = await db.getConnection();
-
     const [users] = await connection.query(
-      'SELECT id, password, nickname, kakao_id FROM users WHERE email = ?',
+      'SELECT id, password, nickname, role, kakao_id FROM users WHERE email = ?',
       [email]
     );
 
@@ -97,7 +96,7 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: '비밀번호가 일치하지 않습니다.' });
     }
 
-    const token = jwt.sign({ id: user.id, nickname: user.nickname }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, nickname: user.nickname, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
     res.json({ user: { id: user.id, nickname: user.nickname }, token });
     connection.release();
