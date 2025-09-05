@@ -1,7 +1,8 @@
 // client/src/App.js
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode'; 
+import { Routes, Route } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
+import axios from 'axios';
 
 import AdminUsers from './pages/AdminUser';
 import AdminHome from './pages/AdminHome';
@@ -16,14 +17,17 @@ import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import Mypage from './pages/Mypage';
 
-import MateList from './pages/MateList'; 
-import MateForm from './pages/MateForm';
-import MateDetail from './pages/MateDetail';
+import MateList from './features/mate/MateList';
+import MateForm from './features/mate/MateForm';
+import MateDetail from './features/mate/MateDetail';
 
-import ChatList from './pages/ChatList';
-import ChatRoom from './pages/ChatRoom';
+import ChatList from './features/chat/ChatList';
+import ChatRoom from './features/chat/ChatRoom';
 
-import Recommend from './pages/Recommend';
+import Recommend from './features/recommend/Recommend';
+
+import PlanList from './features/plan/pages/PlanList';
+import PlanEditor from './features/plan/pages/PlanEditor';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -33,7 +37,7 @@ function App() {
     if (token) {
       try {
         const decoded = jwtDecode(token);
-        setUser({ id: decoded.id, nickname: decoded.nickname});
+        setUser({ id: decoded.id, nickname: decoded.nickname });
       } catch (err) {
         console.error('토큰 디코딩 실패', err);
         localStorage.removeItem('token');
@@ -41,8 +45,15 @@ function App() {
     }
   }, []);
 
+  // Axios Authorization 헤더 동기화
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    else delete axios.defaults.headers.common['Authorization'];
+  }, [user]); // 로그인/로그아웃 시 자동 반영
+
   return (
-    <Router>
+    <>
       <Header user={user} setUser={setUser} />
       <Routes>
         {/* 기본 경로 분기 */}
@@ -54,27 +65,38 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/mypage" element={<Mypage />} />
 
+        {/* 소셜 콜백 */}
+        <Route path="/auth/kakao/callback" element={<KakaoRedirectHandler setUser={setUser} />} />
 
         {/* 관리자 페이지 */}
-        <Route path="/auth/kakao/callback" element={<KakaoRedirectHandler setUser={setUser} />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/admin" element={<AdminHome user={user} />} />
 
-        {/*여행메이트 게시글*/}
+        {/* 여행메이트 */}
         <Route path="/mate" element={<MateList />} />
         <Route path="/mate/new" element={<MateForm />} />
         <Route path="/mate/:id" element={<MateDetail />} />
-        
 
-        {/*내 채팅 */}  
+        {/* 채팅 */}
         <Route path="/chat" element={<ChatList />} />
         <Route path="/chat/:id" element={<ChatRoom />} />
+
+        {/* 추천 */}
         <Route path="/recommend" element={<Recommend />} />
 
+        {/* 여행 계획 */}
+        <Route path="/plans/new" element={<PlanEditor />} />
+        <Route path="/plans/:id" element={<PlanEditor />} />
+        <Route path="/plans" element={<PlanList />} />
+        <Route path="/plans/:id/readonly" element={<PlanEditor />} />  {/* 읽기전용 라우트 */}
 
+
+        {/* 404 */}
+        <Route path="*" element={<div className="p-6">페이지를 찾을 수 없습니다.</div>} />
       </Routes>
-    </Router>
+    </>
   );
 }
 
 export default App;
+

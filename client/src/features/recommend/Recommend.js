@@ -1,6 +1,6 @@
-// src/pages/Recommend.js
+// client\src\features\recommend\Recommend.js
 import React, { useEffect, useState } from 'react';
-import { mockSpots } from '../data/mockSpots';
+import { mockSpots } from '../../data/mockSpots';
 
 const Recommend = () => {
   const [spots, setSpots] = useState([]);

@@ -1,4 +1,4 @@
-//C:\Users\owner\Documents\GitHub\Heremate\client\src\pages\MateDetail.js
+//client\src\features\mate\MateDetail.js
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -70,7 +70,23 @@ const MateDetail = () => {
           {post.content}
         </div>
         <div className="flex justify-end">
-          <button className="bg-lime-300 hover:bg-lime-400 text-black text-sm font-medium px-6 py-3 rounded-full shadow">
+          <button
+            className="bg-lime-300 hover:bg-lime-400 text-black text-sm font-medium px-6 py-3 rounded-full shadow"
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem('token');
+                const r = await axios.post(
+                  '/api/chats/rooms',
+                  { targetUserId: post.writer_id, postId: post.id }, // ← postId 포함
+                  { headers: { Authorization: `Bearer ${token}` } }
+                );
+                const { roomId } = r.data;
+                navigate(`/chat/${roomId}`);
+              } catch (e) {
+                alert('채팅방 생성 실패: 로그인 상태를 확인해주세요.');
+              }
+            }}
+          >
             💬 채팅 시작하기
           </button>
         </div>

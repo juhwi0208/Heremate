@@ -1,4 +1,4 @@
-// src/pages/MateForm.js
+// client\src\features\mate\MateForm.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -7,9 +7,12 @@ const MateForm = () => {
   const [form, setForm] = useState({
     title: '',
     content: '',
-    travel_date: '',
+    start_date: '',
+    end_date: '',
     location: '',
+    travel_style: '',
   });
+
   const navigate = useNavigate();
 
   const handleChange = e => {
@@ -57,13 +60,23 @@ const MateForm = () => {
           rows={5}
           className="w-full border px-3 py-2 rounded"
         />
-        <input
-          type="date"
-          name="travel_date"
-          value={form.travel_date}
-          onChange={handleChange}
-          className="w-full border px-3 py-2 rounded"
-        />
+        <div className="flex gap-4">
+          <input
+            type="date"
+            name="start_date"
+            value={form.start_date}
+            onChange={handleChange}
+            className="w-full border px-3 py-2 rounded"
+          />
+          <input
+            type="date"
+            name="end_date"
+            value={form.end_date}
+            onChange={handleChange}
+            className="w-full border px-3 py-2 rounded"
+          />
+        </div>
+
         <input
           type="text"
           name="location"
@@ -72,6 +85,23 @@ const MateForm = () => {
           onChange={handleChange}
           className="w-full border px-3 py-2 rounded"
         />
+        <select
+          name="travel_style"
+          value={form.travel_style}
+          onChange={handleChange}
+          className="w-full border px-3 py-2 rounded"
+          required
+        >
+          <option value="">여행 스타일 선택</option>
+          <option value="자연">자연</option>
+          <option value="쇼핑">쇼핑</option>
+          <option value="맛집">맛집</option>
+          <option value="예술">예술</option>
+          <option value="사진">사진</option>
+          <option value="축제">축제</option>
+          <option value="휴식">휴식</option>
+        </select>
+
         <button
           type="submit"
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
