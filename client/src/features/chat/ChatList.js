@@ -50,18 +50,29 @@ const ChatList = () => {
             <div
               key={room.id}
               onClick={() => navigate(`/chat/${room.id}`)}
-              className="border rounded-lg p-4 bg-white shadow hover:shadow-md cursor-pointer"
+              className="group border rounded-xl p-4 bg-white/90 backdrop-blur shadow-sm hover:shadow-md cursor-pointer transition"
             >
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-semibold text-green-700">방 #{room.id}</span>
-                <span className="text-xs text-gray-400">
-                  {room.created_at ? new Date(room.created_at).toLocaleString() : ''}
-                </span>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-500/15 flex items-center justify-center text-green-700 font-semibold">
+                  #{room.id}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">방 #{room.id}</span>
+                    {room.post_id && <span className="text-[11px] text-gray-500">· 게시글 #{room.post_id}</span>}
+                  </div>
+                  <div className="text-xs text-gray-400 truncate">
+                    {room.created_at ? new Date(room.created_at).toLocaleString() : ''}
+                  </div>
+                </div>
+                {Number(room.unread_count) > 0 && (
+                  <span className="min-w-6 h-6 px-2 inline-flex items-center justify-center text-white text-xs font-semibold bg-red-500 rounded-full">
+                    {room.unread_count}
+                  </span>
+                )}
               </div>
-              {room.post_id && (
-                <p className="text-xs text-gray-500">게시글 기반: #{room.post_id}</p>
-              )}
             </div>
+
           ))}
         </div>
       )}

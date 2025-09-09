@@ -1,39 +1,35 @@
-// client/src/features/plan/components/SharedPlanCard.js (핵심만 교체)
+// client/src/features/plan/components/SharedPlanCard.js
 import React from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 export default function SharedPlanCard({ plan }) {
   const nav = useNavigate();
-  const [copying, setCopying] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
 
-  const copyPlan = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return alert('로그인이 필요합니다.');
+  const openReadonly = () => nav(`/plans/${plan.id}/readonly`);
+
+  const copyAsTemplate = async () => {
     try {
-      setCopying(true);
-      const { data } = await axios.post(`/api/plans/${plan.id}/copy`, null, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      alert('내 계획으로 복사되었습니다.');
-      if (data?.newPlanId) nav(`/plans/${data.newPlanId}`);
+      setLoading(true);
+      const { data } = await axios.get(`/api/plans/${plan.id}/readonly`);
+      nav('/plans/new', { state: { seedPlan: data } }); // 저장 누르기 전까지 DB에 생성 안 됨
     } catch (e) {
-      console.error('[copyPlan]', e?.response?.status, e?.response?.data || e);
-      alert('복사에 실패했습니다.');
+      console.error('[copy template]', e?.response?.status, e?.response?.data || e);
+      alert('복사 템플릿 로드 실패');
     } finally {
-      setCopying(false);
+      setLoading(false);
     }
   };
 
   return (
     <div className="border rounded-xl p-4 bg-white">
-      {/* ...카드 본문... */}
+      <div className="text-lg font-semibold">{plan.title}</div>
+      <div className="text-sm text-zinc-600">{plan.country} · {plan.region}</div>
       <div className="mt-3 flex items-center gap-2">
-        <button onClick={copyPlan} className="px-3 py-1 rounded-xl bg-blue-600 text-white">
-          {copying ? '복사 중…' : '복사하기'}
-        </button>
-        <button onClick={() => nav(`/plans/${plan.id}/readonly`)} className="text-sm underline">
-          상세 보기(읽기 전용)
+        <button onClick={openReadonly} className="px-3 py-1 rounded-xl border">상세 보기</button>
+        <button onClick={copyAsTemplate} className="px-3 py-1 rounded-xl bg-blue-600 text-white">
+          {loading ? '불러오는 중…' : '복사하기'}
         </button>
       </div>
     </div>

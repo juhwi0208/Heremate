@@ -35,23 +35,7 @@ router.post('/rooms', verifyToken, async (req, res) => {
   }
 });
 
-// [GET] 내 방 목록
-router.get('/rooms', verifyToken, async (req, res) => {
-  const me = req.user.id;
-  try {
-    const [rows] = await db.query(
-      `SELECT id, post_id, user1_id, user2_id, created_at
-       FROM chat_rooms
-       WHERE user1_id=? OR user2_id=?
-       ORDER BY created_at DESC`,
-      [me, me]
-    );
-    res.json(rows);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'list rooms failed' });
-  }
-});
+
 
 // [GET] 메시지 목록 (증분 after)
 router.get('/rooms/:id/messages', verifyToken, async (req, res) => {
@@ -98,4 +82,53 @@ router.post('/rooms/:id/messages', verifyToken, async (req, res) => {
   }
 });
 
+
+// [PUT] 방 읽음 갱신
+router.put('/rooms/:id/read', verifyToken, async (req, res) => {
+  const me = req.user.id;
+  const { id } = req.params;
+
+  try {
+    await db.query(
+      `INSERT INTO chat_room_reads (chat_room_id, user_id, last_read_at)
+       VALUES (?, ?, NOW())
+       ON DUPLICATE KEY UPDATE last_read_at = GREATEST(last_read_at, NOW())`,
+      [id, me]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'read update failed' });
+  }
+});
+
+
+// [GET] 내 방 목록 + 안 읽은 개수
+router.get('/rooms', verifyToken, async (req, res) => {
+  const me = req.user.id;
+  try {
+    const [rows] = await db.query(
+      `SELECT r.id, r.post_id, r.user1_id, r.user2_id, r.created_at,
+              COALESCE(unread.cnt, 0) AS unread_count
+       FROM chat_rooms r
+       LEFT JOIN (
+         SELECT m.chat_room_id, COUNT(*) AS cnt
+         FROM messages m
+         LEFT JOIN chat_room_reads rr
+           ON rr.chat_room_id = m.chat_room_id
+          AND rr.user_id = ?
+         WHERE m.sender_id <> ?
+           AND (rr.last_read_at IS NULL OR m.sent_at > rr.last_read_at)
+         GROUP BY m.chat_room_id
+       ) AS unread ON unread.chat_room_id = r.id
+       WHERE r.user1_id = ? OR r.user2_id = ?
+       ORDER BY r.created_at DESC`,
+      [me, me, me, me]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'list rooms failed' });
+  }
+});
 module.exports = router;
