@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
-import axios from 'axios';
+import axios from './api/axiosInstance';
 
 import AdminUsers from './pages/AdminUser';
 import AdminHome from './pages/AdminHome';
@@ -45,12 +45,6 @@ function App() {
     }
   }, []);
 
-  // Axios Authorization 헤더 동기화
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    else delete axios.defaults.headers.common['Authorization'];
-  }, [user]); // 로그인/로그아웃 시 자동 반영
 
   return (
     <>

@@ -1,7 +1,9 @@
-// backend/app.js
+// server\app.js
 require('dotenv').config(); 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
 const postRoutes = require('./routes/post');
@@ -10,9 +12,14 @@ const plansRouter = require('./routes/plans');
 const placesRouter = require('./routes/places');
 
 
-
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000', // 개발 프런트 오리진을 '정확히' 지정
+  credentials: true,               // 쿠키/인증정보 허용
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+}));
+app.use(cookieParser()); 
 app.use(express.json());
 app.use('/auth', authRouter);
 app.use('/admin', adminRouter);

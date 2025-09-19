@@ -1,6 +1,6 @@
 // client/src/features/chat/ChatRoom.js
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import axios from 'axios';
+import axios from '../../api/axiosInstance';
 import { useParams } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 
@@ -92,7 +92,7 @@ export default function ChatRoom() {
         ? `/api/chats/rooms/${roomId}/messages?after=${encodeURIComponent(sinceRef.current)}`
         : `/api/chats/rooms/${roomId}/messages`;
 
-      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(url);
 
       const el = listRef.current;
       const prevTop = el ? el.scrollTop : 0;
@@ -181,11 +181,7 @@ export default function ChatRoom() {
     if (!content) return;
 
     try {
-      const res = await axios.post(
-        `/api/chats/rooms/${roomId}/messages`,
-        { content },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await axios.post(`/api/chats/rooms/${roomId}/messages`, { content });
 
       setMsgs((prev) => {
         const el = listRef.current;

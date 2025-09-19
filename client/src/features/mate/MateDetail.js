@@ -1,7 +1,7 @@
 //client\src\features\mate\MateDetail.js
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../api/axiosInstance';
 
 const MateDetail = () => {
   const { id } = useParams();
@@ -12,24 +12,15 @@ const MateDetail = () => {
   useEffect(() => {
     axios.get(`/api/posts/${id}`).then(res => setPost(res.data));
 
-    const token = localStorage.getItem('token');
-    if (token) {
-      axios.get('/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
-        .then(res => setUserId(res.data.id))
-        .catch(() => setUserId(null));
-    }
+    axios.get('/auth/me')
+      .then(res => setUserId(res.data.id))
+      .catch(() => setUserId(null));
   }, [id]);
 
   const handleDelete = async () => {
     if (!window.confirm('정말 삭제하시겠습니까?')) return;
     try {
-      await axios.delete(`/api/posts/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
+      await axios.delete(`/api/posts/${id}`);
       alert('삭제 완료');
       navigate('/mate');
     } catch {
@@ -74,12 +65,10 @@ const MateDetail = () => {
             className="bg-lime-300 hover:bg-lime-400 text-black text-sm font-medium px-6 py-3 rounded-full shadow"
             onClick={async () => {
               try {
-                const token = localStorage.getItem('token');
-                const r = await axios.post(
-                  '/api/chats/rooms',
-                  { targetUserId: post.writer_id, postId: post.id }, // ← postId 포함
-                  { headers: { Authorization: `Bearer ${token}` } }
-                );
+                const r = await axios.post('/api/chats/rooms', {
+                  targetUserId: post.writer_id,
+                  postId: post.id,
+                });
                 const { roomId } = r.data;
                 navigate(`/chat/${roomId}`);
               } catch (e) {

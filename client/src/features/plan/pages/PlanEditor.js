@@ -1,7 +1,7 @@
 // client/src/features/plan/pages/PlanEditor.js
 // 지도 상단 검색 1곳 + 후보 패널 + 일정에 추가
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import axios from 'axios';
+import axios from '../../../api/axiosInstance';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import ShareToggle from '../components/ShareToggle';
@@ -73,7 +73,31 @@ const times30m = Array.from({ length: 48 }, (_, i) => {
   const mm = i % 2 ? '30' : '00';
   return `${hh}:${mm}`;
 });
+
 const hhmmNum = (s) => Number((s || '').replace(':', '') || 0);
+
+// 신형/구형 모두를 { periods: [{ open:{day,time:'HHMM'}, close:{day,time:'HHMM'} }]}로 정규화
+function normalizeOpeningHours(src) {
+  if (!src) return null;
+  try {
+    const base = src.regularOpeningHours || src; // 신형이면 regularOpeningHours, 아니면 그대로
+    const toHHMM = (x) => {
+      if (!x) return '0000';
+      if (typeof x.time === 'string') return x.time;           // 구형처럼 'HHMM'
+      const h = String(x.hour ?? 0).padStart(2, '0');           // 신형: {hour, minute}
+      const m = String(x.minute ?? 0).padStart(2, '0');
+      return `${h}${m}`;
+    };
+    const periods = (base.periods || []).map((p) => ({
+      open:  p.open  ? { day: p.open.day,  time: toHHMM(p.open)  } : undefined,
+      close: p.close ? { day: p.close.day, time: toHHMM(p.close) } : undefined,
+    }));
+    return periods.length ? { periods } : null;
+  } catch {
+    return null;
+  }
+}
+
 
 // 운영시간 내 여부
 function isWithinOpening(openingHours, dateStr, timeStr) {
@@ -125,6 +149,7 @@ export default function PlanEditor() {
   const isEdit = Boolean(id);
   const isReadonly = location.pathname.endsWith('/readonly');
   const seed = !isEdit ? (location.state?.seedPlan || null) : null;
+
   // 상단 폼 상태
   const [title, setTitle] = useState('');
   const [country, setCountry] = useState('');
@@ -137,6 +162,8 @@ export default function PlanEditor() {
   const [isShared, setIsShared] = useState(0);
   const [loading, setLoading] = useState(isEdit);
   const [loadError, setLoadError] = useState(null);
+  const [mapCenter, setMapCenter] = useState({ lat: 37.5665, lng: 126.9780 });
+  const [mapZoom, setMapZoom] = useState(12);
 
   // 구글맵
   const { isLoaded } = useJsApiLoader({
@@ -186,12 +213,17 @@ export default function PlanEditor() {
     return d.entries.find((e) => e.id === selectedEntryId) || null;
   }, [days, activeIdx, selectedEntryId]);
 
-  // Axios 토큰
-  const token = localStorage.getItem('token');
+  // ✅ 선택된 일정이 바뀌면 지도 중심도 따라가도록 동기화
   useEffect(() => {
-    if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    else delete axios.defaults.headers.common['Authorization'];
-  }, [token]);
+    if (selectedEntry?.lat && selectedEntry?.lng) {
+      const pt = { lat: Number(selectedEntry.lat), lng: Number(selectedEntry.lng) };
+      setMapCenter(pt);
+      // 보기 좋게 살짝 확대(이미 더 크면 유지)
+      setMapZoom((z) => (z < 14 ? 14 : z));
+    }
+  }, [selectedEntry]);    
+
+  
 
   // 편집 로드
   useEffect(() => {
@@ -201,8 +233,7 @@ export default function PlanEditor() {
       setLoadError(null);
       try {
         const url = isReadonly ? `/api/plans/${id}/readonly` : `/api/plans/${id}`;
-        const headers = isReadonly ? {} : (token ? { Authorization: `Bearer ${token}` } : {});
-        const { data: p } = await axios.get(url, { headers });
+        const { data: p } = await axios.get(url);
 
         setTitle(p.title || '');
         setCountry(p.country || '');
@@ -256,7 +287,7 @@ export default function PlanEditor() {
         setLoading(false);
       }
     })();
-  }, [id, isEdit, isReadonly, token]);
+  }, [id, isEdit, isReadonly]);
 
   // 생성모드에서 템플릿 적용
   useEffect(() => {
@@ -288,8 +319,10 @@ export default function PlanEditor() {
         placeId: it.place_id || null,
         openingHours: (() => {
           if (!it.opening_hours) return null;
-          try { return typeof it.opening_hours === 'string' ? JSON.parse(it.opening_hours) : it.opening_hours; }
-          catch { return null; }
+          try {
+            const raw = typeof it.opening_hours === 'string' ? JSON.parse(it.opening_hours) : it.opening_hours;
+            return normalizeOpeningHours(raw);
+          } catch { return null; }
         })(),
       });
     });
@@ -415,6 +448,7 @@ export default function PlanEditor() {
     const svc = placesSvcRef.current;
     const gc  = geocoderRef.current;
 
+    // findPlaceAndUpdate 안에 있는 apply를 아래로 교체
     const apply = (r, options = {}) => {
       // --- 내부 헬퍼: 위치/영업시간/사진 안전 추출 ---
       const pickLatLng = (loc) => {
@@ -435,7 +469,6 @@ export default function PlanEditor() {
       };
 
       const normalizeOpeningHours = (oh) => {
-        // 신형(regularOpeningHours)과 구형(opening_hours)을 모두 'HHMM' 형태로 맞춤
         try {
           const src = oh?.regularOpeningHours || oh;
           const periods = (src?.periods || []).map((p) => {
@@ -452,23 +485,20 @@ export default function PlanEditor() {
             };
           });
           return { periods };
-        } catch {
-          return oh || null;
-        }
+        } catch { return oh || null; }
       };
 
       const pickPhotoUrl = (res) => {
         try {
           const p = res?.photos?.[0];
           if (!p) return '';
-          // 신형: getURL, 구형: getUrl
-          if (typeof p.getURL === 'function') return p.getURL({ maxWidth: 640, maxHeight: 480 });
-          if (typeof p.getUrl === 'function') return p.getUrl({ maxWidth: 640, maxHeight: 480 });
+          if (typeof p.getURL === 'function') return p.getURL({ maxWidth: 640, maxHeight: 480 }); // 신형
+          if (typeof p.getUrl === 'function') return p.getUrl({ maxWidth: 640, maxHeight: 480 }); // 구형
           return '';
         } catch { return ''; }
       };
 
-      // --- 옵션(수동 override) 우선, 없으면 r에서 채움 ---
+      // --- 옵션(수동 override) 우선 ---
       const {
         title: optTitle,
         address: optAddress,
@@ -479,15 +509,15 @@ export default function PlanEditor() {
         photoUrl: optPhotoUrl,
       } = options;
 
-      // ✅ 제목 우선순위: displayName.text(신형 표준) → name → (prediction일 때) main_text → 마지막에 사용자가 입력한 검색어
+      // ✅ 제목: 구글 “공식명” 우선 (신형 → 구형 → prediction 보조), 검색어는 쓰지 않음
       const title =
         optTitle ??
         r.displayName?.text ??
         r.name ??
         r.structured_formatting?.main_text ??
-        queryOrDetail;
+        '';
 
-      // ✅ 주소 보정: formattedAddress/ formatted_address → vicinity → (prediction일 때) secondary_text → description → 빈 문자열
+      // ✅ 주소: 신형/구형 → prediction 보조 → 없으면 빈 문자열
       const address =
         optAddress ??
         r.formattedAddress ??
@@ -499,21 +529,18 @@ export default function PlanEditor() {
 
       const placeId = optPlaceId ?? r.place_id ?? r.id ?? null;
 
-      // 위치: 옵션 값 → 신형/구형 location → geometry.location 순으로 탐색
+      // 위치: 옵션 → 신형/구형 location → geometry.location
       let lat = typeof optLat === 'number' ? optLat : null;
       let lng = typeof optLng === 'number' ? optLng : null;
       if (lat == null || lng == null) {
-        const picked =
-          pickLatLng(r.location) ||
-          pickLatLng(r.geometry?.location);
+        const picked = pickLatLng(r.location) || pickLatLng(r.geometry?.location);
         if (picked) { lat = picked.lat; lng = picked.lng; }
       }
 
-      // 영업시간: 옵션 → 신형/구형 원본 → 정규화
+      // 영업시간 정규화
       const rawOH = optOH ?? r.regularOpeningHours ?? r.opening_hours ?? null;
       const openingHours = normalizeOpeningHours(rawOH);
 
-      // 사진 URL
       const photoUrl = optPhotoUrl ?? pickPhotoUrl(r);
 
       // --- 최종 반영 ---
@@ -521,6 +548,7 @@ export default function PlanEditor() {
       setSelectedEntryId(entryId);
       setPreview({ photoUrl, name: title, info: address });
     };
+
 
 
     // 세부정보 객체가 바로 온 경우(Place Details 결과)
@@ -624,7 +652,8 @@ export default function PlanEditor() {
             address: top?.formattedAddress || '',
             lat, lng,
             placeId: top?.id || null,
-            openingHours: top?.regularOpeningHours || null,
+            openingHours: normalizeOpeningHours(top?.regularOpeningHours || null),
+
           });
           setSelectedEntryId(entryId);
           setPreview({ photoUrl: '', name: top?.displayName?.text || '', info: top?.formattedAddress || '' });
@@ -660,7 +689,7 @@ export default function PlanEditor() {
   };
   const save = async () => {
     if (isReadonly) return;
-    if (!token) return alert('로그인이 필요합니다.');
+    if (!localStorage.getItem('token')) return alert('로그인이 필요합니다.');
     if (!title.trim()) return alert('제목을 입력하세요.');
     if (!country.trim() || !region.trim()) return alert('나라와 지역을 입력하세요.');
     if (!start || !end) return alert('날짜를 설정하세요.');
@@ -689,15 +718,14 @@ export default function PlanEditor() {
   };
 
   // 지도 센터 동기화
+  /*
   useEffect(() => {
     if (!mapRef.current || !selectedEntry?.lat || !selectedEntry?.lng) return;
     mapRef.current.panTo({ lat: Number(selectedEntry.lat), lng: Number(selectedEntry.lng) });
-  }, [selectedEntry]);
+  }, [selectedEntry]); 
+  */
 
-  const mapCenter =
-    selectedEntry?.lat && selectedEntry?.lng
-      ? { lat: Number(selectedEntry.lat), lng: Number(selectedEntry.lng) }
-      : { lat: 37.5665, lng: 126.9780 };
+  
 
   const togglePref = (k) =>
     setPrefs((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
@@ -816,7 +844,8 @@ export default function PlanEditor() {
                 ...prev,
                 [pid]: {
                   address: det.formattedAddress || '',
-                  openingHours: det.regularOpeningHours || null,
+                  openingHours: normalizeOpeningHours(det.regularOpeningHours || null),
+
                   photoUrl,
                 },
               }));
@@ -838,7 +867,8 @@ export default function PlanEditor() {
                 ...prev,
                 [pid]: {
                   address: det.formatted_address || '',
-                  openingHours: det.opening_hours || null,
+                 openingHours: normalizeOpeningHours(det.opening_hours || null),
+
                   photoUrl,
                 },
               }));
@@ -911,97 +941,131 @@ export default function PlanEditor() {
     setTempPin(null);
   };
 
-  // 후보: 지도만 이동(임시 핀 표시) - 수정된 부분
+
+  // panToPred를 아래 형태로 수정 (핵심: setMapCenter / setMapZoom도 호출)
+  // panToPred를 아래 형태로 교체
   const panToPred = async (pred) => {
     const Place = window.google?.maps?.places?.Place;
-    const pid = pred.place_id;
-    
-    // New Places API 사용
+    const pid = pred?.place_id;
+
+    // 위치 파서(apply의 것과 동일)
+    const pickLatLng = (loc) => {
+      if (!loc) return null;
+      if (typeof loc.lat === 'function' && typeof loc.lng === 'function') {
+        return { lat: Number(loc.lat()), lng: Number(loc.lng()) };
+      }
+      if (loc.latLng && typeof loc.latLng.lat === 'function') {
+        return { lat: Number(loc.latLng.lat()), lng: Number(loc.latLng.lng()) };
+      }
+      if (typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+        return { lat: Number(loc.lat), lng: Number(loc.lng) };
+      }
+      return null;
+    };
+
+    // 1) 신형 Place → location
     if (Place && pid) {
       try {
-        const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-        const det = await place.fetchFields({ fields: ['location'] });
+        const det = await new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' })
+          .fetchFields({ fields: ['location'] });
         const pt = pickLatLng(det?.location);
-        if (pt && mapRef.current) {
-          mapRef.current.panTo(pt);
+        if (pt) {
+          // ✅ panTo + state(center/zoom) 동기화
+          setMapCenter?.(pt);
+          setMapZoom?.(15);
+          mapRef.current?.panTo(pt);
           setTempPin(pt);
+          setSelectedEntryId?.(null);
           return;
         }
-      } catch (error) {
-        console.log('New Places API failed:', error);
-      }
+      } catch {}
     }
 
-    // Legacy Places API 사용
-    if (placesSvcRef.current?.getDetails && pid) {
-      placesSvcRef.current.getDetails(
-        { placeId: pid, fields: ['geometry'] },
-        (det, st) => {
-          if (st === window.google.maps.places.PlacesServiceStatus.OK && det?.geometry?.location) {
-            const loc = det.geometry.location;
-            const lat = loc.lat(), lng = loc.lng();
-            if (mapRef.current) {
-              mapRef.current.panTo({ lat, lng });
-              setTempPin({ lat, lng }); // 임시 핀
-            }
+    // 2) 서버 상세 폴백
+    if (pid) {
+      try {
+        const r = await fetch(`/api/places/details?id=${encodeURIComponent(pid)}`);
+        if (r.ok) {
+          const det = await r.json();
+          const pt = det?.location
+            ? { lat: Number(det.location.latitude), lng: Number(det.location.longitude) }
+            : null;
+          if (pt) {
+            setMapCenter?.(pt);
+            setMapZoom?.(15);
+            mapRef.current?.panTo(pt);
+            setTempPin(pt);
+            setSelectedEntryId?.(null);
             return;
           }
-          
-          // Geocoding API 폴백
-          const q = pred.description || pred.structured_formatting?.main_text;
-          if (geocoderRef.current && q) {
-            geocoderRef.current.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
-              if (st === 'OK' && res?.[0]) {
-                const loc = res[0].geometry?.location;
-                if (loc && mapRef.current) {
-                  const lat = loc.lat(), lng = loc.lng();
-                  mapRef.current.panTo({ lat, lng });
-                  setTempPin({ lat, lng }); // 임시 핀
-                }
-              }
-            });
-          }
         }
-      );
-      return;
+      } catch {}
     }
-    
-    // 최후 수단으로 Geocoding API만 사용
-    const q = pred.description || pred.structured_formatting?.main_text;
-    if (geocoderRef.current && q) {
-      geocoderRef.current.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
-        if (st === 'OK' && res?.[0]) {
-          const loc = res[0].geometry?.location;
-          if (loc && mapRef.current) {
-            const lat = loc.lat(), lng = loc.lng();
-            mapRef.current.panTo({ lat, lng });
-            setTempPin({ lat, lng }); // 임시 핀
-          }
+
+    // 3) 지오코더 최후의 수단
+    const q = pred?.structured_formatting?.main_text || pred?.description;
+    geocoderRef.current?.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
+      if (st === 'OK' && res?.[0]) {
+        const loc = res[0].geometry?.location;
+        if (loc) {
+          const pt = { lat: loc.lat(), lng: loc.lng() };
+          setMapCenter?.(pt);
+          setMapZoom?.(15);
+          mapRef.current?.panTo(pt);
+          setTempPin(pt);
+          setSelectedEntryId?.(null);
         }
-      });
-    }
+      }
+    });
   };
 
+
+
   // 일정에서 "지도 표시"
+  // showOnMap을 아래 형태로 교체
   const showOnMap = (en) => {
     if (!isLoaded) return;
-    if (en.lat && en.lng) { setSelectedEntryId(en.id); return; }
+
+    // 좌표가 이미 있으면 곧바로 팬 + 확대 + 상태 동기화
+    if (en.lat && en.lng) {
+      const pt = { lat: Number(en.lat), lng: Number(en.lng) };
+      setMapCenter?.(pt);
+      setMapZoom?.(15);
+      mapRef.current?.panTo(pt);
+      setTempPin(pt);
+      setSelectedEntryId(en.id);
+      return;
+    }
+
+    // 좌표가 없으면 주소로 지오코딩 후 업데이트 + 이동
     const q = (en.address || en.title || '').trim();
-    if (!q || !geocoderRef.current) { setSelectedEntryId(en.id); return; }
+    if (!q || !geocoderRef.current) {
+      setSelectedEntryId(en.id);
+      return;
+    }
+
     geocoderRef.current.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
       if (st === 'OK' && res?.[0]) {
         const loc = res[0].geometry?.location;
         if (loc) {
+          const pt = { lat: loc.lat(), lng: loc.lng() };
+          // DB/상태 업데이트
           updateEntry(en.id, {
-            lat: loc.lat(),
-            lng: loc.lng(),
+            lat: pt.lat,
+            lng: pt.lng,
             address: en.address || res[0].formatted_address,
           });
+          // 지도 이동 + 확대 + 핀 + 선택
+          setMapCenter?.(pt);
+          setMapZoom?.(15);
+          mapRef.current?.panTo(pt);
+          setTempPin(pt);
         }
       }
       setSelectedEntryId(en.id);
     });
   };
+
 
   // 영업시간 경고 표시용 (각 엔트리별 즉시 검증) - 수정된 부분
   const openingWarning = (en, dateStr) => {
@@ -1182,11 +1246,11 @@ export default function PlanEditor() {
           <div className="rounded-xl overflow-hidden border h-[360px]">
             {isLoaded ? (
               <GoogleMap
-                onLoad={onMapLoad}
-                onUnmount={onMapUnmount}
+                onLoad={(m) => { mapRef.current = m; }}
+                onUnmount={() => { mapRef.current = null; }}
                 mapContainerStyle={{ width: '100%', height: '100%' }}
                 center={mapCenter}
-                zoom={13}
+                zoom={mapZoom}
                 options={{
                   fullscreenControl: false,
                   streetViewControl: false,

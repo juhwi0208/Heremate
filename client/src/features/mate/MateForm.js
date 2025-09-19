@@ -1,7 +1,7 @@
 // client\src\features\mate\MateForm.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../../api/axiosInstance';
 
 const MateForm = () => {
   const [form, setForm] = useState({
@@ -23,13 +23,7 @@ const MateForm = () => {
   const handleSubmit = async e => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      console.log('token:', token);
-      await axios.post('/api/posts', form, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      await axios.post('/api/posts', form);
       navigate('/mate');
     } catch (err) {
       console.error('게시글 작성 실패:', err);

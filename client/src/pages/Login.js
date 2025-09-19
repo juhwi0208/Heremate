@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
-import axios from 'axios';
+import axios from '../api/axiosInstance';
 
 function Login({ setUser }) {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -16,7 +16,7 @@ function Login({ setUser }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:4000/auth/login', form);
+      const res = await axios.post('/auth/login', form);
       const { user, token } = res.data;
       localStorage.setItem('token', token);
       setUser(user);

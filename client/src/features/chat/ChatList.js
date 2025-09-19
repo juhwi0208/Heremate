@@ -1,6 +1,6 @@
 //client\src\features\chat\ChatList.js  
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import axios from '../../api/axiosInstance';
 import { useNavigate } from 'react-router-dom';
 
 const ChatList = () => {
@@ -9,12 +9,10 @@ const ChatList = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    
     const fetchRooms = async () => {
       try {
-        const res = await axios.get('/api/chats/rooms', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await axios.get('/api/chats/rooms'); // 헤더 자동 주입
         setRooms(res.data || []);
       } catch (err) {
         console.error('채팅방 목록 로드 실패:', err);

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
-import axios from 'axios';
+import axios from '../api/axiosInstance';
 
 function SignUp() {
   const location = useLocation();
@@ -49,7 +49,7 @@ function SignUp() {
     } 
 
     try {
-      const res = await axios.post('http://localhost:4000/auth/signup', form);
+      const res = await axios.post('/auth/signup', form);
       console.log('회원가입 응답:', res.data);
       alert('회원가입 성공! 로그인 후 이용해주세요.');
       navigate('/login');
@@ -66,7 +66,7 @@ function SignUp() {
     }
 
     try {
-      const res = await axios.get(`http://localhost:4000/auth/check-email?email=${form.email}`);
+      const res = await axios.get(`/auth/check-email?email=${form.email}`);
       if (res.data.exists) {
         setEmailCheck({ checked: true, valid: false });
         setEmailMsg('이미 사용 중인 이메일입니다.');

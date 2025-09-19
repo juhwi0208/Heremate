@@ -1,17 +1,15 @@
 // src/pages/Mypage.js
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import axios from '../api/axiosInstance';
 
 const Mypage = () => {
   const [userInfo, setUserInfo] = useState({ email: '', nickname: '' });
   const [editingNickname, setEditingNickname] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
     axios
-      .get('/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      .get('/auth/me')
+    
       .then(res => {
         setUserInfo(res.data);
         setEditingNickname(res.data.nickname);
@@ -23,11 +21,8 @@ const Mypage = () => {
   }, []);
 
   const handleSave = () => {
-    const token = localStorage.getItem('token');
     axios
-      .put('/auth/me', { nickname: editingNickname }, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      .put('/auth/me', { nickname: editingNickname })
       .then(() => {
         alert('닉네임이 수정되었습니다.');
         setUserInfo(prev => ({ ...prev, nickname: editingNickname }));

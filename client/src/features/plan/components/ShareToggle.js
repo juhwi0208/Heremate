@@ -1,6 +1,6 @@
 // client\src\features\plan\components\ShareToggle.js
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import axios from '../../../api/axiosInstance';
 
 /**
  * 사용법
@@ -37,15 +37,13 @@ export default function ShareToggle({ planId, initialShared, onChange }) {
   const toggleShare = async () => {
     if (!planId || loading) return;
     setLoading(true);
-    const token = localStorage.getItem('token');
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     try {
       if (isShared) {
-        await axios.delete(`/api/plans/${planId}/share`, { headers });
+        await axios.delete(`/api/plans/${planId}/share`);
         setIsShared(false);
         onChange && onChange(false);
       } else {
-        await axios.post(`/api/plans/${planId}/share`, null, { headers });
+        await axios.post(`/api/plans/${planId}/share`);
         setIsShared(true);
         onChange && onChange(true);
       }

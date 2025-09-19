@@ -1,6 +1,6 @@
 // client/src/features/plan/pages/PlanList.js
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import axios from '../../../api/axiosInstance';
 import SharedPlanCard from '../components/SharedPlanCard';
 import MyPlansSidebar from '../components/MyPlansSidebar';
 import PlanFilters from '../components/PlanFilters';
@@ -34,15 +34,8 @@ export default function PlanList() {
     };
 
     const loadMine = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setMine([]);
-        return;
-      }
       try {
-        const { data } = await axios.get('/api/plans', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const { data } = await axios.get('/api/plans');
         if (mounted) setMine(Array.isArray(data) ? data : []);
       } catch (e) {
         console.warn('mine fetch failed', e?.response?.status);

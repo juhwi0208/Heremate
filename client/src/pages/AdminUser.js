@@ -1,6 +1,6 @@
 // src/pages/AdminUsers.js
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import axios from '../api/axiosInstance';
 
 function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -19,9 +19,7 @@ function AdminUsers() {
       return;
     }
 
-    axios.get('http://localhost:4000/admin/users', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    axios.get('http://localhost:4000/admin/users')
     .then((res) => {
         const filtered = res.data.filter(user => user.role !== 'admin');
         setUsers(filtered);
@@ -33,14 +31,10 @@ function AdminUsers() {
     });
   };
 
-  const handleDelete = async (id) => {
-    const token = localStorage.getItem('token');
+   const handleDelete = async (id) => {
     if (!window.confirm('정말로 삭제하시겠습니까?')) return;
-
     try {
-      await axios.delete(`http://localhost:4000/admin/users/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+     await axios.delete(`http://localhost:4000/admin/users/${id}`);
       fetchUsers(); // 삭제 후 목록 갱신
     } catch (err) {
       alert('삭제에 실패했습니다.');
