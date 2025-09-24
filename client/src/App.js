@@ -15,7 +15,7 @@ import SignUp from './pages/SignUp';
 import KakaoRedirectHandler from './pages/KakaoRedirectHandler';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
-import Mypage from './pages/Mypage';
+import MyPage from './pages/MyPage';
 
 import MateList from './features/mate/MateList';
 import MateForm from './features/mate/MateForm';
@@ -34,14 +34,26 @@ function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (token) {
-      try {
-        const decoded = jwtDecode(token);
-        setUser({ id: decoded.id, nickname: decoded.nickname });
-      } catch (err) {
-        console.error('토큰 디코딩 실패', err);
-        localStorage.removeItem('token');
-      }
+    if (!token) return;
+
+    try {
+      const decoded = jwtDecode(token);
+      // 1차: 토큰 정보로 즉시 표시
+      setUser({ id: decoded.id, nickname: decoded.nickname });
+
+      // 2차: 서버 프로필로 덮어쓰기(avatarUrl 포함)
+      axios.get('/api/users/me').then(({ data }) => {
+        setUser((u) => ({
+          ...u,
+          nickname: data?.nickname ?? u?.nickname,
+          avatarUrl: data?.avatarUrl || u?.avatarUrl,
+          email: data?.email ?? u?.email,
+          role: data?.role ?? u?.role,
+        }));
+      });
+    } catch (err) {
+      console.error('토큰 디코딩 실패', err);
+      localStorage.removeItem('token');
     }
   }, []);
 
@@ -57,7 +69,8 @@ function App() {
         <Route path="/login" element={<Login setUser={setUser} />} />
         <Route path="/signup" element={<SignUp setUser={setUser} />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/mypage" element={<Mypage />} />
+        <Route path="/mypage" element={<MyPage setUser={setUser} />} />
+
 
         {/* 소셜 콜백 */}
         <Route path="/auth/kakao/callback" element={<KakaoRedirectHandler setUser={setUser} />} />

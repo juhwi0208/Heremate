@@ -33,7 +33,13 @@ const Header = ({ user, setUser }) => {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-2 text-sm text-gray-800 hover:text-green-600"
             >
-              👤 {user.nickname}
+              {/* ✅ 아바타 이미지 (없으면 기본 이미지) */}
+              <img
+                src={user.avatarUrl || "/assets/avatar_placeholder.png"}
+                alt="프로필"
+                className="w-6 h-6 rounded-full object-cover border"
+              />
+              {user.nickname}
             </button>
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-md z-10">
