@@ -3,7 +3,6 @@ import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axiosInstance';
 
-function KakaoRedirectHandler({ setUser }) {
 /**
  * 카카오 인가코드(code) → 서버로 교환 → 토큰 저장 → 내 프로필(/api/users/me) 재조회 → 전역 user 갱신
  * - StrictMode로 useEffect가 2회 호출되는 상황을 guard로 방지
