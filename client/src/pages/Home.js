@@ -27,7 +27,7 @@ const Home = () => {
         </div>
         <div className="md:w-1/2">
           <img
-            src="/assets/map_preview.png"
+            src="/assets/map_preview.jpg"
             alt="지도 미리보기"
             className="rounded-xl shadow-md w-full"
           />
