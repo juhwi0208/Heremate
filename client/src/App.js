@@ -16,6 +16,7 @@ import KakaoRedirectHandler from './pages/KakaoRedirectHandler';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import MyPage from './pages/MyPage';
+import EmailChange from './pages/EmailChange';
 
 import MateList from './features/mate/MateList';
 import MateForm from './features/mate/MateForm';
@@ -70,6 +71,7 @@ function App() {
         <Route path="/signup" element={<SignUp setUser={setUser} />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/mypage" element={<MyPage setUser={setUser} />} />
+        <Route path="/account/email" element={<EmailChange />} />
 
 
         {/* 소셜 콜백 */}

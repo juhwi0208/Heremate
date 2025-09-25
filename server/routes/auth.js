@@ -20,6 +20,7 @@ const {
   confirmNewPassword,
 } = require('../controllers/authController');
 
+const account = require('../controllers/accountController'); 
 const { verifyToken, requireAdmin } = require('../middlewares/auth');
 const db = require('../db');
 
@@ -27,13 +28,14 @@ const db = require('../db');
  * ---------- 카카오 인가 시작 (프론트에서 직접 호출할 때) ----------
  * GET /auth/kakao/start
  */
+// 🟢 Changed: 카카오 인가 URL — 이메일 스코프 & 재동의 강제
 router.get('/kakao/start', (req, res) => {
   const clientId = process.env.KAKAO_REST_API_KEY;
   const redirect = encodeURIComponent(process.env.KAKAO_REDIRECT_URI);
-  const url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirect}&response_type=code`;
+  const scope = encodeURIComponent('account_email'); // 🟢 Added
+  const url = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirect}&response_type=code&scope=${scope}&prompt=consent`; // 🟢 Changed
   return res.redirect(url);
 });
-
 /**
  * Kakao 콜백
  * GET /auth/kakao/callback?code=...
@@ -49,17 +51,22 @@ router.post('/signup', signup);
 router.get('/verify-email', verifyEmail);
 router.post('/resend-verify', resendVerify);
 
+
 /**
  * 로그인
  */
 router.post('/login', login);
 
-/**
- * 비밀번호 재설정 (3단계)
- */
-router.post('/reset-password', requestPasswordReset);       // 코드 발송
-router.post('/reset-password/verify', verifyResetCode);     // 코드 확인
-router.post('/reset-password/confirm', confirmNewPassword); // 새 비번 확정
+// Added: 비밀번호 찾기/변경 3단계
+router.post('/password/request-code', account.requestPasswordCode);
+router.post('/password/verify-code', account.verifyPasswordCode);
+router.post('/password/update', account.updatePasswordByCode);
+
+
+// Added: 이메일 변경 2단계 (인증 필요)
+router.post('/email/request-code', verifyToken, account.requestEmailChangeCode);
+router.post('/email/confirm', verifyToken, account.confirmEmailChange);
+
 
 /**
  * 관리자 예시
@@ -91,6 +98,8 @@ router.put('/me', verifyToken, async (req, res) => {
   connection.release();
   res.json({ message: '닉네임 수정 완료' });
 });
+
+
 
 module.exports = router;
 

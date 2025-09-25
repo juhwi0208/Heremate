@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import axios from '../api/axiosInstance';
+import { Eye, EyeOff } from "lucide-react"; // 🟢 Added
 
 export default function Login({ setUser }) {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -77,8 +78,15 @@ export default function Login({ setUser }) {
               required
               className="pr-10"
             />
-            <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-600"
-              onClick={() => setShowPw((s) => !s)}>{showPw ? '숨김' : '보기'}</button>
+            <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)} // 🟢 Added
+                aria-label={showPw ? "비밀번호 가리기" : "비밀번호 보기"}
+                aria-pressed={showPw}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-zinc-700"
+              >
+                {showPw ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />} {/* 🟢 Added */}
+              </button>
           </div>
 
           {needVerify && (

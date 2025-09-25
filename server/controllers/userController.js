@@ -1,5 +1,5 @@
 // server/controllers/userController.js
-// server/controllers/userController.js
+
 const path = require('path');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
@@ -11,13 +11,18 @@ exports.getMe = async (req, res) => {
   try {
     const conn = await db.getConnection();
     const [rows] = await conn.query(
-      `SELECT id, email, nickname, role, created_at, avatar_url, bio, kakao_id, email_verified
+       `SELECT id, email, nickname, role, created_at AS created_at,
+              avatar_url, bio,
+              CASE WHEN password IS NULL OR password = '' THEN 0 ELSE 1 END AS has_password  /* 🟢 Added */
        FROM users WHERE id = ?`,
       [id]
     );
     conn.release();
+
     if (!rows.length) return res.status(404).json({ error: '사용자 없음' });
+
     const u = rows[0];
+
     return res.json({
       id: u.id,
       email: u.email,
@@ -28,6 +33,7 @@ exports.getMe = async (req, res) => {
       bio: u.bio || '',
       kakaoId: u.kakao_id || null,
       emailVerified: !!u.email_verified,
+      has_password: u.has_password, // 🟢 Added
     });
   } catch (e) {
     console.error(e);

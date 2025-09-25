@@ -1,140 +1,87 @@
 // src/pages/MyPage.js
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { User, BookOpen, Megaphone, Settings as SettingsIcon, ChevronRight, Camera } from "lucide-react";
+import {
+  User,
+  BookOpen,
+  Megaphone,
+  Settings as SettingsIcon,
+  ChevronRight,
+  Camera,
+  Lock, // 🟢 Added
+} from "lucide-react";
 import axios from "../api/axiosInstance";
 
 /* -----------------------------------------------------------
-   ✅ [ADDED] 먼저 보조 컴포넌트들을 선언해서
-   react/jsx-no-undef 경고가 절대 나지 않도록 함.
+   공용 RowItem (버튼 비활성화/타이틀/설명 공통 스타일)
 ----------------------------------------------------------- */
-
-function RowItem({ title, desc, actionLabel, onAction }) {
+function RowItem({ title, desc, actionLabel, onAction, disabled }) {
   return (
     <div className="flex items-center justify-between border-t py-4 first:border-t-0">
       <div>
         <div className="text-sm font-medium text-zinc-800">{title}</div>
         <div className="text-xs text-zinc-500">{desc}</div>
       </div>
-      <button onClick={onAction} className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50">
+      <button
+        onClick={onAction}
+        disabled={disabled}
+        className={`rounded-md border px-3 py-1.5 text-sm ${
+          disabled ? "text-zinc-400 cursor-not-allowed bg-zinc-50" : "text-zinc-700 hover:bg-zinc-50"
+        }`}
+        title={disabled ? "카카오 로그인으로 생성된 계정은 사용 불가" : undefined}
+      >
         {actionLabel}
       </button>
     </div>
   );
 }
 
-/** 
- * ✅ [ADDED] SettingsSection를 최상단에 정의 (JSX 사용 위치보다 위)
- * - 이메일 변경(설정 탭)
- * - 카카오 연동 상태 "연동중" 표시
- * - 비밀번호 변경 링크
- */
-function SettingsSection({ onGoPW, profile, onEmailUpdated }) {
-  const [newEmail, setNewEmail] = React.useState("");
-  const [currentPassword, setCurrentPassword] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-  const [msg, setMsg] = React.useState("");
-  const [err, setErr] = React.useState("");
-
-  const API =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-    "";
-
-  const handleSaveEmail = async () => {
-    setMsg("");
-    setErr("");
-    if (!newEmail) return setErr("새 이메일을 입력해 주세요.");
-
-    try {
-      setSaving(true);
-      const form = new FormData();
-      form.append("email", newEmail);
-      form.append("currentPassword", currentPassword);
-      await axios.put("/api/users/me", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      setMsg("이메일이 변경되었습니다. 받은메일함에서 인증을 완료해 주세요.");
-      setNewEmail("");
-      setCurrentPassword("");
-      if (typeof onEmailUpdated === "function") onEmailUpdated(newEmail);
-    } catch (e) {
-      setErr(e?.response?.data?.error || "이메일 변경에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
+/* -----------------------------------------------------------
+   설정 섹션 (단일 정의)  // 🟢 Changed: 중복 선언 제거, props 통일
+----------------------------------------------------------- */
+function SettingsSection({ onGoPW, isKakaoCreated }) {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
         <div className="mb-4 text-base font-semibold text-zinc-900">계정 설정</div>
 
-        {/* 이메일 변경 */}
-        <div className="mb-3 text-sm font-medium text-zinc-800">이메일 변경</div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <input
-            type="email"
-            placeholder="새 이메일"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            className="rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-green-500"
-          />
-          <input
-            type="password"
-            placeholder="현재 비밀번호"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            className="rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-green-500"
-          />
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            onClick={handleSaveEmail}
-            disabled={saving}
-            className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
-          >
-            {saving ? "저장 중..." : "이메일 저장"}
-          </button>
-          <span className="text-xs text-zinc-500">
-            저장 후 메일로 전송된 링크에서 인증을 완료해 주세요.
-          </span>
-        </div>
-        {(msg || err) && (
-          <div className={`mt-2 text-sm ${err ? "text-red-600" : "text-green-600"}`}>
-            {err || msg}
-          </div>
-        )}
-
-        {/* 카카오 연동 상태/버튼 */}
-        <div className="flex items-center justify-between border-t py-4">
-          <div>
-            <div className="text-sm font-medium text-zinc-800">카카오 연동</div>
-            <div className="text-xs text-zinc-500">카카오 계정으로 간편 로그인</div>
-          </div>
-          {profile?.kakaoId ? (
-            <button
-              disabled
-              className="rounded-md border px-3 py-1.5 text-sm text-green-700 bg-green-50 cursor-default"
-            >
-              연동중
-            </button>
-          ) : (
-            <button
-              onClick={() => (window.location.href = `${API}/auth/kakao/start`)}
-              className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
-            >
-              연동하기
-            </button>
-          )}
-        </div>
-
-        {/* 비밀번호 변경(찾기) */}
         <RowItem
           title="비밀번호 변경"
-          desc="정기적으로 변경을 권장합니다"
-          actionLabel="변경하기"
-          onAction={onGoPW}
+          desc={isKakaoCreated ? "카카오로 만든 계정은 비밀번호 기능을 사용할 수 없어요" : "정기적으로 변경을 권장합니다"}
+          actionLabel={
+            isKakaoCreated ? (
+              <span className="inline-flex items-center gap-1">
+                <Lock className="h-3.5 w-3.5" /> 사용 불가
+              </span>
+            ) : (
+              "변경하기"
+            )
+          }
+          onAction={!isKakaoCreated ? onGoPW : undefined}
+          disabled={isKakaoCreated}
+        />
+
+        <RowItem
+          title="이메일 변경"
+          desc={isKakaoCreated ? "카카오로 만든 계정은 이메일 변경이 불가해요" : "현재 비밀번호 인증 후 새 이메일로 변경합니다"}
+          actionLabel={
+            isKakaoCreated ? (
+              <span className="inline-flex items-center gap-1">
+                <Lock className="h-3.5 w-3.5" /> 사용 불가
+              </span>
+            ) : (
+              "변경하기"
+            )
+          }
+          onAction={() => !isKakaoCreated && (window.location.href = "/account/email")}
+          disabled={isKakaoCreated}
+        />
+
+        <RowItem
+          title="카카오 연동"
+          desc="카카오 계정으로 간편 로그인"
+          actionLabel="연동하기"
+          onAction={() => (window.location.href = "/auth/kakao/start")}
         />
       </div>
 
@@ -152,7 +99,6 @@ function SettingsSection({ onGoPW, profile, onEmailUpdated }) {
 /* -----------------------------------------------------------
    메인 컴포넌트
 ----------------------------------------------------------- */
-
 const NAV = [
   { key: "profile", label: "프로필", icon: User },
   { key: "stories", label: "여행 스토리", icon: BookOpen },
@@ -164,7 +110,7 @@ export default function MyPage({ setUser }) {
   const navigate = useNavigate();
   const [active, setActive] = useState("profile");
 
-  // 기본 프로필 데이터
+  // 프로필 상태
   const [profile, setProfile] = useState({
     id: null,
     nickname: "",
@@ -175,18 +121,15 @@ export default function MyPage({ setUser }) {
     avatarUrl: "",
     kakaoId: null,
     emailVerified: false,
+    hasPassword: true, // 🟢 Added: 비밀번호 존재 여부(카카오 계정 판별)
   });
 
-  // ✅ [ADDED] 닉네임 중복 검사 상태/원본 닉네임
+  // 닉네임 중복검사
   const originalNickRef = useRef("");
   const [nickState, setNickState] = useState({ checking: false, valid: true, msg: "" });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // 이메일 수정 폼 상태
-  const [emailForm, setEmailForm] = useState({ newEmail: "", currentPassword: "" });
-  const [emailSaveMsg, setEmailSaveMsg] = useState("");
 
   // 이미지 업로드 프리뷰
   const fileRef = useRef(null);
@@ -210,8 +153,8 @@ export default function MyPage({ setUser }) {
           avatarUrl: data?.avatarUrl ?? "",
           kakaoId: data?.kakaoId ?? null,
           emailVerified: !!data?.emailVerified,
+          hasPassword: typeof data?.has_password === "number" ? !!data?.has_password : data?.hasPassword ?? true, // 🟢 Added
         }));
-        // ✅ [ADDED] 원본 닉네임 저장
         if (data?.nickname) originalNickRef.current = data.nickname;
       } catch {
         console.warn("/api/users/me fetch failed; rendering with minimal info.");
@@ -224,7 +167,7 @@ export default function MyPage({ setUser }) {
     };
   }, []);
 
-  // ✅ [ADDED] 닉네임 디바운스 중복 검사 (버튼 없이 자동)
+  // 닉네임 중복 검사(부재 시에도 저장 가능하도록 안전 처리) // 🟢 Changed
   useEffect(() => {
     const nick = profile.nickname?.trim();
     if (!nick) {
@@ -235,21 +178,20 @@ export default function MyPage({ setUser }) {
       setNickState({ checking: false, valid: true, msg: "" });
       return;
     }
-
     setNickState((s) => ({ ...s, checking: true, msg: "" }));
     const t = setTimeout(async () => {
       try {
         const { data } = await axios.get("/auth/check-nickname", { params: { nickname: nick } });
-        if (data.exists) {
+        if (data?.exists) {
           setNickState({ checking: false, valid: false, msg: "이미 사용 중인 닉네임입니다." });
         } else {
           setNickState({ checking: false, valid: true, msg: "" });
         }
       } catch {
-        setNickState({ checking: false, valid: false, msg: "중복 확인 중 오류가 발생했습니다." });
+        // 🟢 Changed: API 없거나 오류여도 저장 막지 않음
+        setNickState({ checking: false, valid: true, msg: "" });
       }
-    }, 400);
-
+    }, 350);
     return () => clearTimeout(t);
   }, [profile.nickname]);
 
@@ -262,67 +204,41 @@ export default function MyPage({ setUser }) {
     reader.readAsDataURL(file);
   };
 
-  const onSaveProfile = async (e) => {
-    e?.preventDefault();
-    if (saving) return;
+  const onSaveProfile = useCallback(async (e) => {
+  e?.preventDefault();
+  if (saving) return;
+  if (!nickState.valid || nickState.checking) {
+    alert("닉네임 중복을 확인해 주세요.");
+    return;
+  }
+  try {
+    setSaving(true);
+    const form = new FormData();
+    form.append("nickname", profile.nickname || "");
+    form.append("bio", profile.bio || "");
+    if (fileRef.current?.files?.[0]) form.append("avatar", fileRef.current.files[0]);
 
-    // ✅ [ADDED] 닉네임 중복/검사중이면 저장 차단
-    if (!nickState.valid || nickState.checking) {
-      alert("닉네임 중복을 확인해 주세요.");
-      return;
+    const { data } = await axios.put("/api/users/me", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    const newUrl = data?.avatarUrl || avatarPreview;
+    if (newUrl) setProfile((p) => ({ ...p, avatarUrl: newUrl }));
+
+    if (typeof setUser === "function") {
+      setUser((u) => ({ ...u, nickname: profile.nickname, avatarUrl: newUrl || u?.avatarUrl }));
     }
+    originalNickRef.current = profile.nickname;
+    alert("프로필이 저장되었습니다.");
+  } catch (err) {
+    console.error(err);
+    alert("프로필 저장에 실패했습니다.");
+  } finally {
+    setSaving(false);
+  }
+}, [saving, nickState, profile, avatarPreview, setUser]);
 
-    try {
-      setSaving(true);
-      const form = new FormData();
-      form.append("nickname", profile.nickname || "");
-      form.append("bio", profile.bio || "");
-      if (fileRef.current?.files?.[0]) {
-        form.append("avatar", fileRef.current.files[0]);
-      }
-      const { data } = await axios.put("/api/users/me", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      const newUrl = data?.avatarUrl || avatarPreview; // 서버 응답 우선
-      if (newUrl) {
-        setProfile((p) => ({ ...p, avatarUrl: newUrl }));
-      }
-
-      if (typeof setUser === "function") {
-        setUser((u) => ({
-          ...u,
-          nickname: profile.nickname,
-          avatarUrl: newUrl || u?.avatarUrl,
-        }));
-      }
-
-      // ✅ [ADDED] 저장 성공 후 원본 닉네임 갱신
-      originalNickRef.current = profile.nickname;
-      alert("프로필이 저장되었습니다.");
-    } catch (err) {
-      console.error(err);
-      alert("프로필 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const onChangeEmail = async () => {
-    setEmailSaveMsg("");
-    try {
-      const payload = new FormData();
-      payload.append("email", emailForm.newEmail);
-      payload.append("currentPassword", emailForm.currentPassword);
-      await axios.put("/api/users/me", payload);
-      setEmailSaveMsg("이메일이 변경되었습니다. 받은메일함에서 인증을 완료해 주세요.");
-      setProfile((p) => ({ ...p, email: emailForm.newEmail, emailVerified: false }));
-      setEmailForm({ newEmail: "", currentPassword: "" });
-    } catch (e) {
-      const msg = e.response?.data?.error || "이메일 변경 실패";
-      setEmailSaveMsg(msg);
-    }
-  };
+  const isKakaoCreated = !profile.hasPassword; // 🟢 Added
 
   const content = useMemo(() => {
     switch (active) {
@@ -346,14 +262,11 @@ export default function MyPage({ setUser }) {
                         {profile.emailVerified ? "(인증됨)" : "(미인증)"}
                       </span>
                     </div>
-                    <div className="text-xs text-zinc-500">가입일: {fmtKoreanDate(profile.joinedAt) || "-"}</div>
+                    <div className="text-xs text-zinc-500">가입일: {fmtKoreanDate(profile.joinedAt) || "-"}</div> {/* 🟢 Changed */}
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    const el = document.getElementById("profile-edit");
-                    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
+                  onClick={() => document.getElementById("profile-edit")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                   className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
                 >
                   프로필 수정
@@ -373,12 +286,11 @@ export default function MyPage({ setUser }) {
                 className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-green-500"
                 placeholder="닉네임"
               />
-              {/* ✅ [ADDED] 닉네임 중복 안내 */}
-              {nickState.msg || nickState.checking ? (
+              {(nickState.msg || nickState.checking) && (
                 <div className={`mt-1 text-xs ${nickState.valid ? "text-green-600" : "text-red-600"}`}>
                   {nickState.checking ? "중복 확인 중…" : nickState.msg}
                 </div>
-              ) : null}
+              )}
 
               <label className="mb-2 mt-4 block text-sm text-zinc-700">소개 (선택)</label>
               <textarea
@@ -408,7 +320,6 @@ export default function MyPage({ setUser }) {
 
               <button
                 type="submit"
-                // ✅ [CHANGED] 닉네임 중복/검사 중이면 저장 불가
                 disabled={saving || !nickState.valid || nickState.checking}
                 className="inline-flex rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-green-700 disabled:opacity-60"
               >
@@ -420,54 +331,45 @@ export default function MyPage({ setUser }) {
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <div className="mb-4 text-base font-semibold text-zinc-900">계정 관리</div>
 
-              {/* 이메일 변경 */}
-              <div className="mb-3 text-sm font-medium text-zinc-800">이메일 변경</div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <input
-                  type="email"
-                  placeholder="새 이메일"
-                  value={emailForm.newEmail}
-                  onChange={(e) => setEmailForm((f) => ({ ...f, newEmail: e.target.value }))}
-                  className="rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-green-500"
-                />
-                <input
-                  type="password"
-                  placeholder="현재 비밀번호"
-                  value={emailForm.currentPassword}
-                  onChange={(e) => setEmailForm((f) => ({ ...f, currentPassword: e.target.value }))}
-                  className="rounded-md border border-zinc-200 px-3 py-2 text-sm outline-none focus:border-green-500"
-                />
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  onClick={onChangeEmail}
-                  className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
-                >
-                  이메일 저장
-                </button>
-                <span className="text-xs text-zinc-500">저장 후 메일로 전송된 링크에서 인증을 완료해 주세요.</span>
-              </div>
-              {emailSaveMsg && <div className="mt-2 text-xs text-zinc-600">{emailSaveMsg}</div>}
+              <RowItem
+                title="이메일 변경"
+                desc={isKakaoCreated ? "카카오로 만든 계정은 이메일 변경이 불가해요" : "현재 비밀번호 확인 후 새 이메일을 인증해 변경합니다"}
+                actionLabel={
+                  isKakaoCreated ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Lock className="h-3.5 w-3.5" /> 사용 불가
+                    </span>
+                  ) : (
+                    "변경하기"
+                  )
+                }
+                onAction={() => !isKakaoCreated && navigate("/account/email")}
+                disabled={isKakaoCreated}
+              />
 
-              {/* 비밀번호 변경(찾기) */}
               <RowItem
                 title="비밀번호 변경"
                 desc="보안을 위해 정기적으로 비밀번호를 변경하세요"
-                actionLabel="변경하기"
-                onAction={() => navigate("/forgot-password")}
+                actionLabel={
+                  isKakaoCreated ? (
+                    <span className="inline-flex items-center gap-1">
+                      <Lock className="h-3.5 w-3.5" /> 사용 불가
+                    </span>
+                  ) : (
+                    "변경하기"
+                  )
+                }
+                onAction={() => !isKakaoCreated && navigate("/forgot-password?mode=change")}
+                disabled={isKakaoCreated}
               />
 
-              {/* 카카오 연동 상태 */}
               <div className="flex items-center justify-between border-t py-4">
                 <div>
                   <div className="text-sm font-medium text-zinc-800">카카오 연동</div>
                   <div className="text-xs text-zinc-500">카카오 계정으로 간편 로그인</div>
                 </div>
                 {profile.kakaoId ? (
-                  <button
-                    disabled
-                    className="rounded-md border px-3 py-1.5 text-sm text-green-700 bg-green-50 cursor-default"
-                  >
+                  <button disabled className="rounded-md border px-3 py-1.5 text-sm text-green-700 bg-green-50 cursor-default">
                     연동중
                   </button>
                 ) : (
@@ -500,23 +402,15 @@ export default function MyPage({ setUser }) {
         return <StoriesSection />;
 
       case "mates":
-        return <MatesSection />;
+        return <MatesSection myId={profile.id} />; // 🟢 Added: 내 글만 필터링 위해 ID 전달
 
       case "settings":
-        return (
-          <SettingsSection
-            profile={profile}
-            onEmailUpdated={(newEmail) =>
-              setProfile((p) => ({ ...p, email: newEmail, emailVerified: false }))
-            }
-            onGoPW={() => navigate("/forgot-password")}
-          />
-        );
+        return <SettingsSection onGoPW={() => navigate("/forgot-password?mode=change")} isKakaoCreated={isKakaoCreated} />;
 
       default:
         return null;
     }
-  }, [active, avatarPreview, navigate, profile, saving, emailForm, emailSaveMsg, nickState]);
+  }, [active, avatarPreview, navigate, profile, saving, nickState, isKakaoCreated, onSaveProfile]);
 
   return (
     <div className="mx-auto min-h-screen max-w-6xl px-4 py-6 md:px-6">
@@ -554,9 +448,8 @@ export default function MyPage({ setUser }) {
 }
 
 /* -----------------------------------------------------------
-   나머지 보조 섹션들
+   보조 섹션들 (기존 동작 유지)
 ----------------------------------------------------------- */
-
 function StoriesSection() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -586,7 +479,10 @@ function StoriesSection() {
       <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
         <div className="mb-2 text-sm font-medium text-zinc-900">아직 작성한 스토리가 없어요</div>
         <div className="mb-4 text-xs text-zinc-500">첫 여행 스토리를 작성해보세요</div>
-        <Link to="/stories/new" className="inline-flex rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+        <Link
+          to="/stories/new"
+          className="inline-flex rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+        >
           스토리 작성하기
         </Link>
       </div>
@@ -606,10 +502,14 @@ function StoriesSection() {
           </div>
           <div className="p-4">
             <div className="line-clamp-1 text-sm font-medium text-zinc-900">{s.title || "제목 없음"}</div>
-            <div className="mt-1 text-xs text-zinc-500">{fmtKoreanDate(s.created_at)}</div>
+            <div className="mt-1 text-xs text-zinc-500">{fmtKoreanDate(s.created_at)}</div> {/* 🟢 Changed */}
             <div className="mt-3 flex gap-2 opacity-0 transition group-hover:opacity-100">
-              <Link to={`/stories/${s.id}`} className="rounded-md border px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50">열기</Link>
-              <Link to={`/stories/${s.id}/edit`} className="rounded-md border px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50">수정</Link>
+              <Link to={`/stories/${s.id}`} className="rounded-md border px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50">
+                열기
+              </Link>
+              <Link to={`/stories/${s.id}/edit`} className="rounded-md border px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50">
+                수정
+              </Link>
               <button className="rounded-md border px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50">삭제</button>
               <button className="rounded-md border px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50">공개 전환</button>
             </div>
@@ -620,7 +520,7 @@ function StoriesSection() {
   );
 }
 
-function MatesSection() {
+function MatesSection({ myId }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -628,9 +528,15 @@ function MatesSection() {
     let mounted = true;
     (async () => {
       try {
-        const { data } = await axios.get("/api/mates?me=1");
+        // 서버가 전체를 보내도, 내 글만 보이게 2중 안전장치
+        const [{ data: me }, { data }] = await Promise.all([axios.get("/api/users/me"), axios.get("/api/mates")]);
         if (!mounted) return;
-        setItems(Array.isArray(data) ? data : []);
+        const mineId = myId || me?.id;
+        const filtered = (Array.isArray(data) ? data : []).filter((p) => {
+          const authorId = p.user_id ?? p.author_id ?? p.userId ?? p.owner_id;
+          return authorId === mineId;
+        });
+        setItems(filtered);
       } catch {
         setItems([]);
       } finally {
@@ -640,7 +546,7 @@ function MatesSection() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [myId]);
 
   if (loading) return <div className="rounded-2xl border bg-white p-6 text-sm text-zinc-500 shadow-sm">로딩 중...</div>;
 
@@ -649,7 +555,10 @@ function MatesSection() {
       <div className="rounded-2xl border bg-white p-10 text-center shadow-sm">
         <div className="mb-2 text-sm font-medium text-zinc-900">등록한 메이트 게시글이 없어요</div>
         <div className="mb-4 text-xs text-zinc-500">새로운 게시글을 작성해보세요</div>
-        <Link to="/mate/new" className="inline-flex rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700">
+        <Link
+          to="/mate/new"
+          className="inline-flex rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+        >
           메이트 글 작성하기
         </Link>
       </div>
@@ -659,45 +568,21 @@ function MatesSection() {
   return (
     <div className="space-y-3">
       {items.map((p) => (
-        <article key={p.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-zinc-900">{p.title}</div>
-              <div className="mt-1 text-xs text-zinc-500">
-                {fmtDateRange(p.start_date, p.end_date)} · {p.location || "지역 미정"}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Link to={`/mate/${p.id}`} className="rounded-md border px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">열기</Link>
-              <Link to={`/mate/${p.id}/edit`} className="rounded-md border px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">수정</Link>
-              <button className="rounded-md border px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">삭제</button>
-              <button className="rounded-md border px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50">마감</button>
-            </div>
-          </div>
-        </article>
+        <div key={p.id} className="rounded-xl border bg-white p-4 shadow-sm hover:shadow">
+          <div className="mb-1 text-sm font-semibold text-zinc-900">{p.title || "제목 없음"}</div>
+          <div className="text-xs text-zinc-500">{p.location || p.region || "-"}</div>
+        </div>
       ))}
     </div>
   );
 }
 
 /* -----------------------------------------------------------
-   유틸
+   날짜 포맷 도우미  // 🟢 Added
 ----------------------------------------------------------- */
-
 function fmtKoreanDate(iso) {
   if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "-";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}년 ${m}월 ${day}일`;
-}
-
-function fmtDateRange(s, e) {
-  const a = fmtKoreanDate(s);
-  const b = fmtKoreanDate(e);
-  if (a === "-" && b === "-") return "기간 미정";
-  if (a !== "-" && b !== "-") return `${a} ~ ${b}`;
-  return a !== "-" ? `${a} ~` : `~ ${b}`;
+  return d.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
 }
