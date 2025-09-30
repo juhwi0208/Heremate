@@ -189,9 +189,6 @@ export default function EmailChange() {
                 {showPw ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
               </button>
             </div>
-            <p className="text-xs text-zinc-500">
-              * 일반 로그인 사용자에 한해 필요합니다. 카카오 전용 계정은 별도 본인 확인 절차가 적용될 수 있어요.
-            </p>
             <button
               type="button"
               onClick={goNextAfterPassword}

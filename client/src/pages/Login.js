@@ -43,18 +43,17 @@ export default function Login({ setUser }) {
     }
   };
 
-  const handleKakaoLogin = () => {
-    const REST_API_KEY = import.meta.env?.VITE_KAKAO_REST_API_KEY
-                      || process.env.REACT_APP_KAKAO_REST_API_KEY
-                      || '3711275ed6eadb3c397d486504269a15'; // .env 값 권장
-    const REDIRECT_URI =
-      import.meta.env?.VITE_KAKAO_REDIRECT_URI
-      || process.env.REACT_APP_KAKAO_REDIRECT_URI
-      || 'http://localhost:3000/auth/kakao/callback';
+ const handleKakaoLogin = () => {
+  // 우선순위: Vite / CRA env var, 없으면 기본 로컬백엔드
+  const API_BASE =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+    process.env.REACT_APP_API_BASE_URL ||
+    'http://localhost:4000';
 
-    const url = `https://kauth.kakao.com/oauth/authorize?client_id=${REST_API_KEY}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code`;
-    window.location.href = url;
-  };
+  // 브라우저 네비게이션은 반드시 백엔드 호스트(예: :4000)로 직접 가야함
+  window.location.href = `${API_BASE.replace(/\/$/, '')}/auth/kakao/start`;
+};
+
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100 px-4">
       <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md">

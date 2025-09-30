@@ -8,14 +8,12 @@ import {
   Settings as SettingsIcon,
   ChevronRight,
   Camera,
-  Lock, // 🟢 Added
+  Lock,
 } from "lucide-react";
 import axios from "../api/axiosInstance";
 
-/* -----------------------------------------------------------
-   공용 RowItem (버튼 비활성화/타이틀/설명 공통 스타일)
------------------------------------------------------------ */
-function RowItem({ title, desc, actionLabel, onAction, disabled }) {
+/* 공용 RowItem */
+function RowItem({ title, desc, actionLabel, onAction, disabled, titleAttr }) {
   return (
     <div className="flex items-center justify-between border-t py-4 first:border-t-0">
       <div>
@@ -25,10 +23,8 @@ function RowItem({ title, desc, actionLabel, onAction, disabled }) {
       <button
         onClick={onAction}
         disabled={disabled}
-        className={`rounded-md border px-3 py-1.5 text-sm ${
-          disabled ? "text-zinc-400 cursor-not-allowed bg-zinc-50" : "text-zinc-700 hover:bg-zinc-50"
-        }`}
-        title={disabled ? "카카오 로그인으로 생성된 계정은 사용 불가" : undefined}
+        title={titleAttr}
+        className={`rounded-md border px-3 py-1.5 text-sm ${disabled ? "text-zinc-400 cursor-not-allowed bg-zinc-50" : "text-zinc-700 hover:bg-zinc-50"}`}
       >
         {actionLabel}
       </button>
@@ -36,10 +32,8 @@ function RowItem({ title, desc, actionLabel, onAction, disabled }) {
   );
 }
 
-/* -----------------------------------------------------------
-   설정 섹션 (단일 정의)  // 🟢 Changed: 중복 선언 제거, props 통일
------------------------------------------------------------ */
-function SettingsSection({ onGoPW, isKakaoCreated }) {
+/* 설정 섹션 */
+function SettingsSection({ onGoPW, isKakaoCreated, isLinked, onLinkKakao, onDelete }) {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
@@ -47,7 +41,7 @@ function SettingsSection({ onGoPW, isKakaoCreated }) {
 
         <RowItem
           title="비밀번호 변경"
-          desc={isKakaoCreated ? "카카오로 만든 계정은 비밀번호 기능을 사용할 수 없어요" : "정기적으로 변경을 권장합니다"}
+          desc={isKakaoCreated ? "카카오로 만든 계정은 비밀번호 변경이 불가해요" : "정기적으로 변경을 권장합니다"}
           actionLabel={
             isKakaoCreated ? (
               <span className="inline-flex items-center gap-1">
@@ -77,18 +71,37 @@ function SettingsSection({ onGoPW, isKakaoCreated }) {
           disabled={isKakaoCreated}
         />
 
-        <RowItem
-          title="카카오 연동"
-          desc="카카오 계정으로 간편 로그인"
-          actionLabel="연동하기"
-          onAction={() => (window.location.href = "/auth/kakao/start")}
-        />
+        {/* ✅ 프로필 탭과 완전히 동일한 마크업/스타일로 교체 */}
+        <div className="flex items-center justify-between border-t py-4">
+          <div>
+            <div className="text-sm font-medium text-zinc-800">카카오 연동</div>
+            <div className="text-xs text-zinc-500">카카오 계정으로 간편 로그인</div>
+          </div>
+          {isLinked ? (
+            <button
+              disabled
+              className="rounded-md border px-3 py-1.5 text-sm text-green-700 bg-green-50 cursor-default"
+            >
+              연동중
+            </button>
+          ) : (
+            <button
+              onClick={onLinkKakao}
+              className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+            >
+              연동하기
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
         <div className="mb-2 text-base font-semibold text-zinc-900">위험 영역</div>
         <div className="text-xs text-zinc-500">계정 삭제는 복구할 수 없습니다.</div>
-        <button className="mt-4 rounded-md border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+        <button
+          onClick={onDelete}
+          className="mt-4 rounded-md border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+        >
           계정 삭제 요청
         </button>
       </div>
@@ -96,9 +109,6 @@ function SettingsSection({ onGoPW, isKakaoCreated }) {
   );
 }
 
-/* -----------------------------------------------------------
-   메인 컴포넌트
------------------------------------------------------------ */
 const NAV = [
   { key: "profile", label: "프로필", icon: User },
   { key: "stories", label: "여행 스토리", icon: BookOpen },
@@ -110,7 +120,6 @@ export default function MyPage({ setUser }) {
   const navigate = useNavigate();
   const [active, setActive] = useState("profile");
 
-  // 프로필 상태
   const [profile, setProfile] = useState({
     id: null,
     nickname: "",
@@ -121,17 +130,14 @@ export default function MyPage({ setUser }) {
     avatarUrl: "",
     kakaoId: null,
     emailVerified: false,
-    hasPassword: true, // 🟢 Added: 비밀번호 존재 여부(카카오 계정 판별)
+    hasPassword: true,
   });
 
-  // 닉네임 중복검사
   const originalNickRef = useRef("");
   const [nickState, setNickState] = useState({ checking: false, valid: true, msg: "" });
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // 이미지 업로드 프리뷰
   const fileRef = useRef(null);
   const [avatarPreview, setAvatarPreview] = useState("");
 
@@ -153,7 +159,8 @@ export default function MyPage({ setUser }) {
           avatarUrl: data?.avatarUrl ?? "",
           kakaoId: data?.kakaoId ?? null,
           emailVerified: !!data?.emailVerified,
-          hasPassword: typeof data?.has_password === "number" ? !!data?.has_password : data?.hasPassword ?? true, // 🟢 Added
+          hasPassword:
+            typeof data?.has_password === "number" ? !!data?.has_password : data?.hasPassword ?? true,
         }));
         if (data?.nickname) originalNickRef.current = data.nickname;
       } catch {
@@ -167,7 +174,6 @@ export default function MyPage({ setUser }) {
     };
   }, []);
 
-  // 닉네임 중복 검사(부재 시에도 저장 가능하도록 안전 처리) // 🟢 Changed
   useEffect(() => {
     const nick = profile.nickname?.trim();
     if (!nick) {
@@ -182,13 +188,12 @@ export default function MyPage({ setUser }) {
     const t = setTimeout(async () => {
       try {
         const { data } = await axios.get("/auth/check-nickname", { params: { nickname: nick } });
-        if (data?.exists) {
-          setNickState({ checking: false, valid: false, msg: "이미 사용 중인 닉네임입니다." });
-        } else {
-          setNickState({ checking: false, valid: true, msg: "" });
-        }
+        setNickState({
+          checking: false,
+          valid: !data?.exists,
+          msg: data?.exists ? "이미 사용 중인 닉네임입니다." : "",
+        });
       } catch {
-        // 🟢 Changed: API 없거나 오류여도 저장 막지 않음
         setNickState({ checking: false, valid: true, msg: "" });
       }
     }, 350);
@@ -204,41 +209,74 @@ export default function MyPage({ setUser }) {
     reader.readAsDataURL(file);
   };
 
-  const onSaveProfile = useCallback(async (e) => {
-  e?.preventDefault();
-  if (saving) return;
-  if (!nickState.valid || nickState.checking) {
-    alert("닉네임 중복을 확인해 주세요.");
-    return;
-  }
-  try {
-    setSaving(true);
-    const form = new FormData();
-    form.append("nickname", profile.nickname || "");
-    form.append("bio", profile.bio || "");
-    if (fileRef.current?.files?.[0]) form.append("avatar", fileRef.current.files[0]);
+  const onSaveProfile = useCallback(
+    async (e) => {
+      e?.preventDefault();
+      if (saving) return;
+      if (!nickState.valid || nickState.checking) {
+        alert("닉네임 중복을 확인해 주세요.");
+        return;
+      }
+      try {
+        setSaving(true);
+        const form = new FormData();
+        form.append("nickname", profile.nickname || "");
+        form.append("bio", profile.bio || "");
+        if (fileRef.current?.files?.[0]) form.append("avatar", fileRef.current.files[0]);
 
-    const { data } = await axios.put("/api/users/me", form, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+        const { data } = await axios.put("/api/users/me", form, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        const newUrl = data?.avatarUrl || avatarPreview;
+        if (newUrl) setProfile((p) => ({ ...p, avatarUrl: newUrl }));
+        if (typeof setUser === "function")
+          setUser((u) => ({ ...u, nickname: profile.nickname, avatarUrl: newUrl || u?.avatarUrl }));
+        originalNickRef.current = profile.nickname;
+        alert("프로필이 저장되었습니다.");
+      } catch (err) {
+        console.error(err);
+        alert("프로필 저장에 실패했습니다.");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [saving, nickState, profile, avatarPreview, setUser]
+  );
 
-    const newUrl = data?.avatarUrl || avatarPreview;
-    if (newUrl) setProfile((p) => ({ ...p, avatarUrl: newUrl }));
+  const isKakaoCreated = !profile.hasPassword;
+  const isLinked = !!profile.kakaoId;
 
-    if (typeof setUser === "function") {
-      setUser((u) => ({ ...u, nickname: profile.nickname, avatarUrl: newUrl || u?.avatarUrl }));
+  // 🔗 카카오 연동 시작 (link 모드)
+  const onLinkKakao = () => {
+    const API_BASE =
+      (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+      process.env.REACT_APP_API_BASE_URL ||
+      "http://localhost:4000";
+    const token = localStorage.getItem("token") || "";
+    window.location.href = `${API_BASE.replace(/\/$/, "")}/auth/kakao/start?mode=link&token=${encodeURIComponent(
+      token
+    )}`;
+  };
+
+  // ❌ 회원탈퇴
+  const onDelete = async () => {
+    if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
+    try {
+      if (profile.hasPassword) {
+        const pw = window.prompt("현재 비밀번호를 입력해 주세요.");
+        if (!pw) return;
+        await axios.delete("/api/users/me", { data: { currentPassword: pw } });
+      } else {
+        await axios.delete("/api/users/me", { data: { confirm: true } });
+      }
+      alert("탈퇴 처리가 완료되었습니다.");
+      localStorage.removeItem("token");
+      setUser && setUser(null);
+      window.location.href = "/";
+    } catch (e) {
+      alert(e.response?.data?.error || "탈퇴 처리 실패");
     }
-    originalNickRef.current = profile.nickname;
-    alert("프로필이 저장되었습니다.");
-  } catch (err) {
-    console.error(err);
-    alert("프로필 저장에 실패했습니다.");
-  } finally {
-    setSaving(false);
-  }
-}, [saving, nickState, profile, avatarPreview, setUser]);
-
-  const isKakaoCreated = !profile.hasPassword; // 🟢 Added
+  };
 
   const content = useMemo(() => {
     switch (active) {
@@ -255,18 +293,26 @@ export default function MyPage({ setUser }) {
                     className="h-16 w-16 rounded-full object-cover ring-1 ring-zinc-200"
                   />
                   <div>
-                    <div className="text-lg font-semibold text-zinc-900">{profile.nickname || "사용자"}</div>
+                    <div className="text-lg font-semibold text-zinc-900">
+                      {profile.nickname || "사용자"}
+                    </div>
                     <div className="text-sm text-zinc-600">
                       {profile.email || "-"}{" "}
-                      <span className={`ml-1 text-xs ${profile.emailVerified ? "text-green-600" : "text-zinc-500"}`}>
+                      <span
+                        className={`ml-1 text-xs ${
+                          profile.emailVerified ? "text-green-600" : "text-zinc-500"
+                        }`}
+                      >
                         {profile.emailVerified ? "(인증됨)" : "(미인증)"}
                       </span>
                     </div>
-                    <div className="text-xs text-zinc-500">가입일: {fmtKoreanDate(profile.joinedAt) || "-"}</div> {/* 🟢 Changed */}
+                    <div className="text-xs text-zinc-500">가입일: {fmtKoreanDate(profile.joinedAt) || "-"}</div>
                   </div>
                 </div>
                 <button
-                  onClick={() => document.getElementById("profile-edit")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  onClick={() =>
+                    document.getElementById("profile-edit")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
                   className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
                 >
                   프로필 수정
@@ -327,13 +373,17 @@ export default function MyPage({ setUser }) {
               </button>
             </form>
 
-            {/* 계정 관리 카드 */}
+            {/* 계정 관리 카드 (프로필 탭) */}
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <div className="mb-4 text-base font-semibold text-zinc-900">계정 관리</div>
 
               <RowItem
                 title="이메일 변경"
-                desc={isKakaoCreated ? "카카오로 만든 계정은 이메일 변경이 불가해요" : "현재 비밀번호 확인 후 새 이메일을 인증해 변경합니다"}
+                desc={
+                  isKakaoCreated
+                    ? "카카오로 만든 계정은 이메일 변경이 불가해요"
+                    : "현재 비밀번호 확인 후 새 이메일을 인증해 변경합니다"
+                }
                 actionLabel={
                   isKakaoCreated ? (
                     <span className="inline-flex items-center gap-1">
@@ -368,15 +418,15 @@ export default function MyPage({ setUser }) {
                   <div className="text-sm font-medium text-zinc-800">카카오 연동</div>
                   <div className="text-xs text-zinc-500">카카오 계정으로 간편 로그인</div>
                 </div>
-                {profile.kakaoId ? (
-                  <button disabled className="rounded-md border px-3 py-1.5 text-sm text-green-700 bg-green-50 cursor-default">
+                {isLinked ? (
+                  <button
+                    disabled
+                    className="rounded-md border px-3 py-1.5 text-sm text-green-700 bg-green-50 cursor-default"
+                  >
                     연동중
                   </button>
                 ) : (
-                  <button
-                    onClick={() => (window.location.href = "/auth/kakao/start")}
-                    className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
-                  >
+                  <button onClick={onLinkKakao} className="rounded-md border px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50">
                     연동하기
                   </button>
                 )}
@@ -402,15 +452,24 @@ export default function MyPage({ setUser }) {
         return <StoriesSection />;
 
       case "mates":
-        return <MatesSection myId={profile.id} />; // 🟢 Added: 내 글만 필터링 위해 ID 전달
+        return <MatesSection myId={profile.id} />;
 
       case "settings":
-        return <SettingsSection onGoPW={() => navigate("/forgot-password?mode=change")} isKakaoCreated={isKakaoCreated} />;
+        // ✅ 설정 탭에도 동일하게 kakao 연동 상태/버튼/탈퇴 핸들러 전달
+        return (
+          <SettingsSection
+            onGoPW={() => navigate("/forgot-password?mode=change")}
+            isKakaoCreated={isKakaoCreated}
+            isLinked={isLinked}
+            onLinkKakao={onLinkKakao}
+            onDelete={onDelete}
+          />
+        );
 
       default:
         return null;
     }
-  }, [active, avatarPreview, navigate, profile, saving, nickState, isKakaoCreated, onSaveProfile]);
+  }, [active, avatarPreview, navigate, profile, saving, nickState, isKakaoCreated, isLinked, onSaveProfile, onDelete]);
 
   return (
     <div className="mx-auto min-h-screen max-w-6xl px-4 py-6 md:px-6">
@@ -502,7 +561,7 @@ function StoriesSection() {
           </div>
           <div className="p-4">
             <div className="line-clamp-1 text-sm font-medium text-zinc-900">{s.title || "제목 없음"}</div>
-            <div className="mt-1 text-xs text-zinc-500">{fmtKoreanDate(s.created_at)}</div> {/* 🟢 Changed */}
+            <div className="mt-1 text-xs text-zinc-500">{fmtKoreanDate(s.created_at)}</div>
             <div className="mt-3 flex gap-2 opacity-0 transition group-hover:opacity-100">
               <Link to={`/stories/${s.id}`} className="rounded-md border px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50">
                 열기
@@ -528,7 +587,6 @@ function MatesSection({ myId }) {
     let mounted = true;
     (async () => {
       try {
-        // 서버가 전체를 보내도, 내 글만 보이게 2중 안전장치
         const [{ data: me }, { data }] = await Promise.all([axios.get("/api/users/me"), axios.get("/api/mates")]);
         if (!mounted) return;
         const mineId = myId || me?.id;
@@ -578,7 +636,7 @@ function MatesSection({ myId }) {
 }
 
 /* -----------------------------------------------------------
-   날짜 포맷 도우미  // 🟢 Added
+   날짜 포맷
 ----------------------------------------------------------- */
 function fmtKoreanDate(iso) {
   if (!iso) return "-";

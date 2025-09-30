@@ -24,5 +24,6 @@ const upload = multer({ storage });
 // /api/users
 router.get('/me', verifyToken, ctrl.getMe);
 router.put('/me', verifyToken, upload.single('avatar'), ctrl.updateMe);
+router.delete('/me', verifyToken, ctrl.deleteMe); // 🟢 Added
 
 module.exports = router;
