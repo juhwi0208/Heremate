@@ -26,18 +26,17 @@ const {
 } = require('../controllers/authController');
 
 // ---------- 카카오 인가 시작 (login / link 공용) ----------
-// GET /auth/kakao/start?mode=login|link&token=<jwt-optional-when-link>
 router.get('/kakao/start', (req, res) => {
   const clientId = process.env.KAKAO_REST_API_KEY;
   const redirect = encodeURIComponent(process.env.KAKAO_REDIRECT_URI);
-  // ✅ 이메일만: account_email
-  //   필요시 .env 에 KAKAO_SCOPE=account_email 로 바꿔도 동작하도록 처리
   const scope = encodeURIComponent(process.env.KAKAO_SCOPE || 'account_email');
-
   const mode = (req.query.mode === 'link') ? 'link' : 'login';
   const token = req.query.token || '';
   const stateObj = { mode, token };
   const state = encodeURIComponent(Buffer.from(JSON.stringify(stateObj)).toString('base64'));
+
+  // 🔴 핵심: 링크 모드에서는 prompt=login 으로 SSO 자동승인 방지(계정 선택/로그인 화면 강제)
+  const prompt = mode === 'link' ? 'login' : 'consent';
 
   const url =
     `https://kauth.kakao.com/oauth/authorize` +
@@ -45,7 +44,7 @@ router.get('/kakao/start', (req, res) => {
     `&redirect_uri=${redirect}` +
     `&response_type=code` +
     `&scope=${scope}` +
-    `&prompt=consent` + // 첫 연결 시 동의창 강제
+    `&prompt=${prompt}` +
     `&state=${state}`;
 
   return res.redirect(url);

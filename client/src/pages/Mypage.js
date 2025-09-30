@@ -33,7 +33,7 @@ function RowItem({ title, desc, actionLabel, onAction, disabled, titleAttr }) {
 }
 
 /* 설정 섹션 */
-function SettingsSection({ onGoPW, isKakaoCreated, isLinked, onLinkKakao, onDelete }) {
+function SettingsSection({ onGoPW, onGoEmail, isKakaoCreated, isLinked, onLinkKakao, onDelete }) {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
@@ -51,7 +51,7 @@ function SettingsSection({ onGoPW, isKakaoCreated, isLinked, onLinkKakao, onDele
               "변경하기"
             )
           }
-          onAction={!isKakaoCreated ? onGoPW : undefined}
+          onAction={() => !isKakaoCreated && onGoPW?.()}
           disabled={isKakaoCreated}
         />
 
@@ -67,7 +67,7 @@ function SettingsSection({ onGoPW, isKakaoCreated, isLinked, onLinkKakao, onDele
               "변경하기"
             )
           }
-          onAction={() => !isKakaoCreated && (window.location.href = "/account/email")}
+          onAction={() => !isKakaoCreated && onGoEmail?.()}
           disabled={isKakaoCreated}
         />
 
@@ -156,11 +156,14 @@ export default function MyPage({ setUser }) {
           joinedAt: data?.created_at || data?.joinedAt || p.joinedAt,
           role: data?.role ?? p.role,
           bio: data?.bio ?? "",
-          avatarUrl: data?.avatarUrl ?? "",
-          kakaoId: data?.kakaoId ?? null,
-          emailVerified: !!data?.emailVerified,
+          avatarUrl: data?.avatarUrl ?? data?.avatar_url ?? "",
+          kakaoId: data?.kakaoId ?? data?.kakao_id ?? null,
+          emailVerified: !!(data?.emailVerified ?? data?.email_verified),
           hasPassword:
-            typeof data?.has_password === "number" ? !!data?.has_password : data?.hasPassword ?? true,
+            // 숫자(0/1) 또는 불린, 없으면 기본 true
+            (typeof data?.has_password === "number" ? !!data?.has_password
+              : typeof data?.has_password === "boolean" ? data?.has_password
+              : (typeof data?.hasPassword === "boolean" ? data?.hasPassword : true)),
         }));
         if (data?.nickname) originalNickRef.current = data.nickname;
       } catch {
@@ -247,19 +250,18 @@ export default function MyPage({ setUser }) {
   const isLinked = !!profile.kakaoId;
 
   // 🔗 카카오 연동 시작 (link 모드)
-  const onLinkKakao = () => {
+  const onLinkKakao = useCallback(() => {
     const API_BASE =
       (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
       process.env.REACT_APP_API_BASE_URL ||
       "http://localhost:4000";
     const token = localStorage.getItem("token") || "";
-    window.location.href = `${API_BASE.replace(/\/$/, "")}/auth/kakao/start?mode=link&token=${encodeURIComponent(
-      token
-    )}`;
-  };
+    // ✅ 링크 모드 + 내 JWT 포함 → 서버가 state 검증 후 현재 사용자에게 kakao_id 부여
+    window.location.href = `${API_BASE.replace(/\/$/, "")}/auth/kakao/start?mode=link&token=${encodeURIComponent(token)}`;
+  }, []);
 
   // ❌ 회원탈퇴
-  const onDelete = async () => {
+  const onDelete =  useCallback(async () => {
     if (!window.confirm("정말 탈퇴하시겠어요? 이 작업은 되돌릴 수 없습니다.")) return;
     try {
       if (profile.hasPassword) {
@@ -276,7 +278,7 @@ export default function MyPage({ setUser }) {
     } catch (e) {
       alert(e.response?.data?.error || "탈퇴 처리 실패");
     }
-  };
+   }, [profile.hasPassword, setUser]);
 
   const content = useMemo(() => {
     switch (active) {
@@ -459,6 +461,7 @@ export default function MyPage({ setUser }) {
         return (
           <SettingsSection
             onGoPW={() => navigate("/forgot-password?mode=change")}
+            onGoEmail={() => navigate("/account/email")}
             isKakaoCreated={isKakaoCreated}
             isLinked={isLinked}
             onLinkKakao={onLinkKakao}
@@ -469,7 +472,7 @@ export default function MyPage({ setUser }) {
       default:
         return null;
     }
-  }, [active, avatarPreview, navigate, profile, saving, nickState, isKakaoCreated, isLinked, onSaveProfile, onDelete]);
+  }, [active, avatarPreview, navigate, profile, saving, nickState, isKakaoCreated, isLinked, onSaveProfile, onDelete, onLinkKakao]);
 
   return (
     <div className="mx-auto min-h-screen max-w-6xl px-4 py-6 md:px-6">

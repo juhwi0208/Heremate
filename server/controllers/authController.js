@@ -17,6 +17,35 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'HereMate <no-reply@heremate.app>';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3000';
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:4000';
 
+// 🟢 카카오-only 사용자를 위한 비밀번호 최초 생성
+// POST /auth/password/set  (JWT 필요)  body: { newPassword }
+exports.setInitialPassword = async (req, res) => {
+  const userId = req.user?.id;
+  const { newPassword } = req.body || {};
+  if (!userId) return res.status(401).json({ error: '인증이 필요합니다.' });
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: '비밀번호는 8자 이상이어야 합니다.' });
+  }
+
+  const conn = await db.getConnection();
+  try {
+    const [[u]] = await conn.query(
+      'SELECT id, password FROM users WHERE id = ? LIMIT 1',
+      [userId]
+    );
+    if (!u) { conn.release(); return res.status(404).json({ error: '사용자가 없습니다.' }); }
+    if (u.password) { conn.release(); return res.status(400).json({ error: '이미 비밀번호가 설정된 계정입니다.' }); }
+
+    const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await conn.query('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
+    conn.release();
+    return res.json({ ok: true });
+  } catch (e) {
+    try { conn.release(); } catch {}
+    console.error('setInitialPassword error:', e);
+    return res.status(500).json({ error: '비밀번호 설정 실패' });
+  }
+};
 // SMTP 설정
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
