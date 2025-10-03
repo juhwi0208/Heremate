@@ -103,27 +103,47 @@ router.put('/rooms/:id/read', verifyToken, async (req, res) => {
 });
 
 
-// [GET] 내 방 목록 + 안 읽은 개수
+// [GET] 내 방 목록 (+상대 프로필, 게시글 제목/지역/스타일, 읽지않음)
 router.get('/rooms', verifyToken, async (req, res) => {
   const me = req.user.id;
   try {
     const [rows] = await db.query(
-      `SELECT r.id, r.post_id, r.user1_id, r.user2_id, r.created_at,
-              COALESCE(unread.cnt, 0) AS unread_count
-       FROM chat_rooms r
-       LEFT JOIN (
-         SELECT m.chat_room_id, COUNT(*) AS cnt
-         FROM messages m
-         LEFT JOIN chat_room_reads rr
-           ON rr.chat_room_id = m.chat_room_id
-          AND rr.user_id = ?
-         WHERE m.sender_id <> ?
-           AND (rr.last_read_at IS NULL OR m.sent_at > rr.last_read_at)
-         GROUP BY m.chat_room_id
-       ) AS unread ON unread.chat_room_id = r.id
-       WHERE r.user1_id = ? OR r.user2_id = ?
-       ORDER BY r.created_at DESC`,
-      [me, me, me, me]
+      `
+      SELECT 
+        r.id,
+        r.post_id,
+        r.user1_id,
+        r.user2_id,
+        r.created_at,
+        CASE WHEN r.user1_id = ? THEN r.user2_id ELSE r.user1_id END AS other_id,
+        u.nickname       AS other_nickname,
+        u.avatar_url     AS other_avatar_url,
+        -- "탈퇴회원%" 닉네임이면 메시지 비활성화
+        CASE WHEN u.nickname LIKE '탈퇴회원%' THEN 0 ELSE 1 END AS other_active,
+        p.title          AS post_title,
+        p.location       AS post_location,
+        p.travel_style   AS post_style,
+        COALESCE(unread.cnt, 0) AS unread_count
+      FROM chat_rooms r
+      JOIN users u
+        ON u.id = CASE WHEN r.user1_id = ? THEN r.user2_id ELSE r.user1_id END
+      LEFT JOIN posts p
+        ON p.id = r.post_id
+      LEFT JOIN (
+        SELECT m.chat_room_id, COUNT(*) AS cnt
+        FROM messages m
+        LEFT JOIN chat_room_reads rr
+          ON rr.chat_room_id = m.chat_room_id
+         AND rr.user_id = ?
+        WHERE m.sender_id <> ?
+          AND (rr.last_read_at IS NULL OR m.sent_at > rr.last_read_at)
+        GROUP BY m.chat_room_id
+      ) AS unread
+        ON unread.chat_room_id = r.id
+      WHERE r.user1_id = ? OR r.user2_id = ?
+      ORDER BY r.created_at DESC
+      `,
+      [me, me, me, me, me, me]
     );
     res.json(rows);
   } catch (e) {
@@ -131,4 +151,6 @@ router.get('/rooms', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'list rooms failed' });
   }
 });
+
+
 module.exports = router;

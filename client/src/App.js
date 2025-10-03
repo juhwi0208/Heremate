@@ -24,6 +24,7 @@ import MateDetail from './features/mate/MateDetail';
 
 import ChatList from './features/chat/ChatList';
 import ChatRoom from './features/chat/ChatRoom';
+import ChatPage from './features/chat/ChatPage';
 
 import Recommend from './features/recommend/Recommend';
 
@@ -87,8 +88,9 @@ function App() {
         <Route path="/mate/:id" element={<MateDetail />} />
 
         {/* 채팅 */}
-        <Route path="/chat" element={<ChatList />} />
-        <Route path="/chat/:id" element={<ChatRoom />} />
+        <Route path="/chat" element={<ChatPage/>} />
+        <Route path="/chat/:id" element={<ChatPage />} />
+        
 
         {/* 추천 */}
         <Route path="/recommend" element={<Recommend />} />

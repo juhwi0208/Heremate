@@ -6,15 +6,20 @@ import { jwtDecode } from 'jwt-decode';
 
 const SCROLL_THRESHOLD = 16; // 바닥 판정 여유(px)
 
-const formatKoreanDate = (iso) =>
-  new Date(iso).toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+export default function ChatRoom({ roomIdOverride, embed = false, roomMeta, onRead }) {
 
-export default function ChatRoom() {
-  const { id: roomId } = useParams();
+  const params = useParams();
+  const roomId = roomIdOverride ?? params.id;   // <- 우선순위
+  const pickTs = (m) => m?.sent_at || m?.created_at || null;
+  const toDate = (mOrIso) => {
+    const iso = typeof mOrIso === 'string' ? mOrIso : pickTs(mOrIso);
+    const d = iso ? new Date(iso) : null;
+    return d && !isNaN(d) ? d : null;
+  };
+  const formatDateKR = (mOrIso) => {
+    const d = toDate(mOrIso);
+    return d ? d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+  };
 
   const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState('');
@@ -33,13 +38,18 @@ export default function ChatRoom() {
   const scrollTickingRef = useRef(false); // rAF 스로틀
 
   const token = localStorage.getItem('token');
-  const meId = token ? jwtDecode(token)?.id : null;
+  let meId = null;
+  if (token) {
+    try { meId = jwtDecode(token)?.id || null; } catch { meId = null; }
+  }  
+  const isOtherInactive = !!(roomMeta && roomMeta.other_active === 0);
+  const avatar = roomMeta?.other_avatar_url || '';
+  const initial = roomMeta?.other_nickname?.slice(0,1)?.toUpperCase() || '#';
 
   // -------- 스크롤 유틸 --------
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
-    el.style.scrollBehavior = 'auto'; // 전역 smooth 영향 차단
     el.scrollTop = el.scrollHeight;
   }, []);
 
@@ -68,16 +78,16 @@ export default function ChatRoom() {
     const merged = Array.from(map.values());
 
     merged.sort((a, b) => {
-      const ta = new Date(a.sent_at).getTime();
-      const tb = new Date(b.sent_at).getTime();
+      const ta = toDate(a)?.getTime() ?? 0;
+      const tb = toDate(b)?.getTime() ?? 0;
       if (ta !== tb) return ta - tb;
       return (a.id || 0) - (b.id || 0);
     });
-
     const added = merged.length - prev.length;
 
     const last = merged[merged.length - 1];
-    if (last?.sent_at) sinceRef.current = last.sent_at;
+    const lastIso = pickTs(last);
+    if (lastIso) sinceRef.current = lastIso;
 
     return { merged, added };
   }, []);
@@ -96,7 +106,7 @@ export default function ChatRoom() {
 
       const el = listRef.current;
       const prevTop = el ? el.scrollTop : 0;
-      const prevHeight = el ? el.scrollHeight : 0;
+      
 
       setMsgs((prev) => {
         const { merged, added } = mergeMessages(prev, res.data);
@@ -108,26 +118,19 @@ export default function ChatRoom() {
 
         // 스크롤 유지/배너 처리
         if (el) {
-          if (computeIsAtBottom(el)) {
-            // 바닥이면 자연스럽게 최신 유지
+          const atBottomNow = computeIsAtBottom(el);
+          if (atBottomNow) {
             requestAnimationFrame(scrollToBottom);
+            setShowNewMsgBanner(false);
+            setUnreadCount(0);
           } else {
-            // 위로 스크롤 중: 배너 + 현재 위치 고정
             setShowNewMsgBanner(true);
             setUnreadCount((n) => n + added);
-
-            requestAnimationFrame(() => {
-              // 새 높이만큼 증가해도 기존 viewport 유지
-              const newHeight = el.scrollHeight;
-              const delta = newHeight - prevHeight;
-              // 일반적으로 아래에만 append 되므로 delta > 0일 때 그대로 유지해도 OK지만,
-              // 일부 브라우저 앵커링 대응으로 보정
-              el.scrollTop = prevTop; // 위치 복원
-              // 필요하면 아래처럼 보정치 더해도 됨:
-              // el.scrollTop = prevTop; // (append at bottom이면 prevTop 유지가 자연스러움)
-            });
+            requestAnimationFrame(() => { el.scrollTop = prevTop; });
           }
         }
+
+
 
         return merged;
       });
@@ -137,8 +140,9 @@ export default function ChatRoom() {
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [roomId, token, mergeMessages, scrollToBottom]);
-
+  }, [roomId, mergeMessages, scrollToBottom]);
+  
+  
   // -------- 최초 로드 + 폴링 --------
   useEffect(() => {
     setMsgs([]);
@@ -153,7 +157,7 @@ export default function ChatRoom() {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
       isFetchingRef.current = false;
     };
-  }, [roomId, token, fetchMsgs]);
+  }, [roomId, fetchMsgs]);
 
   // -------- 스크롤 리스너 (rAF 스로틀) --------
   useEffect(() => {
@@ -178,13 +182,12 @@ export default function ChatRoom() {
   // -------- 전송 --------
   const send = async () => {
     const content = text.trim();
-    if (!content) return;
+    if (!content || isOtherInactive) return;
 
     try {
       const res = await axios.post(`/api/chats/rooms/${roomId}/messages`, { content });
 
       setMsgs((prev) => {
-        const el = listRef.current;
         const { merged, added } = mergeMessages(prev, [res.data]);
         // 내가 보낸 건 바로 바닥 고정 + 배너 해제
         requestAnimationFrame(scrollToBottom);
@@ -203,7 +206,7 @@ export default function ChatRoom() {
   };
 
   const onKeyDown = (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send();
     }
@@ -212,8 +215,13 @@ export default function ChatRoom() {
   // -------- 읽음 표시 --------
   useEffect(() => {
     if (!roomId) return;
-    axios.put(`/api/chats/rooms/${roomId}/read`).catch(() => {});
-  }, [roomId, msgs.length]);
+    (async () => {
+      try {
+        await axios.put(`/api/chats/rooms/${roomId}/read`);
+        onRead?.(roomId); // ← 사이드바 뱃지 0으로 즉시 반영
+      } catch {}
+    })();
+  }, [roomId, msgs.length, onRead]);
 
   // -------- 배너 클릭 --------
   const onBannerClick = () => {
@@ -223,13 +231,28 @@ export default function ChatRoom() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto h-[80vh] flex flex-col border rounded shadow bg-white">
-      {/* 헤더 */}
-      <div className="px-4 py-3 border-b bg-gradient-to-r from-green-50 to-white flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-green-500/15 flex items-center justify-center text-green-700 font-bold">
-          {String(roomId).slice(-1)}
+    <div className={embed
+      ? "h-full flex flex-col bg-white"
+      : "max-w-2xl mx-auto h-[80vh] flex flex-col border rounded shadow bg-white"
+    }>
+      {/* 헤더: 상대 프로필 + 이름(닉네임 · 제목) + 지역·스타일 */}
+      <div className="px-4 py-3 border-b bg-green-50/60 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-green-500/10 overflow-hidden flex items-center justify-center">
+          {avatar
+            ? <img src={avatar} alt="상대 프로필" className="w-full h-full object-cover" />
+            : <span className="text-green-700 font-semibold text-sm">{initial}</span>}
         </div>
-        <div className="font-semibold text-green-700">채팅방 #{roomId}</div>
+        <div className="min-w-0">
+          <div className="font-semibold text-green-700 truncate">
+            {roomMeta?.other_nickname || `채팅방 #${roomId}`}
+            {roomMeta?.post_title && <span className="ml-2 text-gray-500">· {roomMeta.post_title}</span>}
+          </div>
+          {(roomMeta?.post_location || roomMeta?.post_style) && (
+            <div className="text-xs text-gray-400 truncate">
+              {[roomMeta?.post_location, roomMeta?.post_style].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 메시지 리스트 */}
@@ -252,16 +275,14 @@ export default function ChatRoom() {
           msgs.map((m, idx) => {
             const mine = meId && Number(m.sender_id) === Number(meId);
             const prev = msgs[idx - 1];
-            const isNewDay =
-              !prev ||
-              new Date(prev.sent_at).toDateString() !== new Date(m.sent_at).toDateString();
+            const isNewDay = !prev || (toDate(prev)?.toDateString() !== toDate(m)?.toDateString());
 
             return (
-              <React.Fragment key={m.id}>
+              <React.Fragment key={m.id ?? `${idx}-${pickTs(m) ?? 'na'}`}>
                 {isNewDay && (
                   <div className="flex justify-center my-2">
                     <span className="text-xs text-gray-500 bg-gray-200/80 px-3 py-1 rounded-full">
-                      {formatKoreanDate(m.sent_at)}
+                      {formatDateKR(m)}
                     </span>
                   </div>
                 )}
@@ -280,14 +301,9 @@ export default function ChatRoom() {
                       mine ? 'bg-green-200' : 'bg-white border'
                     }`}
                   >
-                    <p className="text-gray-800 whitespace-pre-wrap">{m.message}</p>
+                    <p className="text-gray-800 whitespace-pre-wrap">{m.content ?? m.message ?? ''}</p>
                     <div className="text-[11px] text-gray-400 mt-1">
-                      {m.sent_at
-                        ? new Date(m.sent_at).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : ''}
+                      { toDate(m)?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || '' }
                     </div>
                   </div>
                 </div>
@@ -296,6 +312,15 @@ export default function ChatRoom() {
           })
         )}
       </div>
+
+      {/* 탈퇴회원 안내 */}
+      {isOtherInactive && (
+        <div className="px-4 py-2 text-[13px] text-red-600 bg-red-50 border-t border-red-100">
+          탈퇴한 회원에게는 메시지를 보낼 수 없습니다.
+        </div>
+      )}
+
+      
 
       {/* 새 메시지 배너 */}
       {showNewMsgBanner && !isAtBottom && (
@@ -331,15 +356,19 @@ export default function ChatRoom() {
       {/* 입력 */}
       <div className="border-t p-3 flex gap-2 sticky bottom-0 bg-white">
         <input
-          className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-300"
-          placeholder="메시지 입력..."
+          type="text"
           value={text}
+          placeholder="메시지 입력…"
+          disabled={isOtherInactive}
+          className="flex-1 rounded-full border px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 disabled:bg-gray-100 disabled:text-gray-400"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
         />
         <button
           onClick={send}
-          className="rounded-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm shadow"
+          disabled={isOtherInactive}
+          className={`rounded-full px-4 py-2 text-white text-sm shadow 
+                    ${isOtherInactive ? 'bg-gray-300 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
         >
           전송
         </button>
