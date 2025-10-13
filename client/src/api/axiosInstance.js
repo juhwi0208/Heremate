@@ -1,11 +1,11 @@
 // client/src/api/axiosInstance.js
 import axiosBase from 'axios';
 
-/**
+/*
  * ✅ 절대 URL 우선 규칙
  * - 프로덕션: REACT_APP_API_BASE_URL (또는 Vite의 VITE_API_BASE_URL)
  * - 개발:     REACT_APP_API_BASE_URL_DEV (없으면 http://localhost:4000 디폴트)
- */
+*/
 const PROD_BASE =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
   process.env.REACT_APP_API_BASE_URL ||
@@ -14,6 +14,7 @@ const PROD_BASE =
 const DEV_BASE =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL_DEV) ||
   process.env.REACT_APP_API_BASE_URL_DEV ||
+  process.env.REACT_APP_API_BASE_URL ||   // ✅ CRA 기본 키도 허용
   'http://localhost:4000';
 
 const API_BASE = (process.env.NODE_ENV === 'production' ? (PROD_BASE || 'https://YOUR-API') : DEV_BASE)

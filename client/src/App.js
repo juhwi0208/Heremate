@@ -56,6 +56,8 @@ function App() {
       localStorage.removeItem('token');
     }
   }, []);
+  
+  const Stories = () => <div className="p-6">스토리 준비 중</div>;
 
 
   return (
@@ -68,6 +70,7 @@ function App() {
           {/* 필요하면 현재 탭 설명/브레드크럼 넣는 영역 */}
         </div>
       </div>
+      
 
       {/* 🟢 메인 컨테이너 */}
       <main className="max-w-6xl mx-auto px-4 py-6">
@@ -92,6 +95,7 @@ function App() {
           <Route path="/plans/:id" element={<PlanEditor />} />
           <Route path="/plans" element={<PlanList />} />
           <Route path="/plans/:id/readonly" element={<PlanEditor />} />
+          <Route path="/stories" element={<Stories />} />
           <Route path="*" element={<div className="p-6">페이지를 찾을 수 없습니다.</div>} />
         </Routes>
       </main>
