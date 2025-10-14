@@ -1,6 +1,6 @@
 // client/src/features/recommend/Recommend.js
-// 🔎 PlanEditor의 지도 검색/후보 카드/지도보기만 경량 복사한 컴포넌트
-import React, { useEffect, useMemo, useRef, useState, detailCache } from 'react';
+// PlanEditor의 지도 검색 로직을 경량화하여 2/3 : 1/3 분할 레이아웃 적용 버전
+import React, { useEffect, useRef, useState, detailCache } from 'react';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 
 const GOOGLE_LIBRARIES = ['places'];
@@ -53,30 +53,24 @@ export default function Recommend() {
   const [mapCenter, setMapCenter] = useState({ lat: 37.5665, lng: 126.9780 });
   const [mapZoom, setMapZoom] = useState(12);
 
-  // 구글맵 로더
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
     libraries: GOOGLE_LIBRARIES,
     version: 'weekly',
   });
 
-  // 구글 객체/서비스 핸들러
   const mapRef = useRef(null);
   const placesSvcRef = useRef(null);
   const geocoderRef = useRef(null);
   const autocompleteRef = useRef(null);
   const sessionTokenRef = useRef(null);
 
-  // 검색 입력/결과/상태
   const [mapSearch, setMapSearch] = useState('');
   const [mapPreds, setMapPreds] = useState([]);
-  const [resultsOpen, setResultsOpen] = useState(false);
   const [detailCache, setDetailCache] = useState({}); // { [place_id]: { address, openingHours, photoUrl } }
-
-  // 지도 임시 핀(후보 지도보기용)
   const [tempPin, setTempPin] = useState(null);
 
-  // Google 객체 준비
+  // Map 초기화
   const onMapLoad = (m) => {
     mapRef.current = m;
     if (window.google?.maps) {
@@ -91,7 +85,7 @@ export default function Recommend() {
   };
   const onMapUnmount = () => { mapRef.current = null; };
 
-  // 후보 리스트가 바뀌면 미리 상세(주소/사진/영업시간)를 캐시
+  // 후보 상세(주소/영업/사진) 미리 캐시
   useEffect(() => {
     const svc = placesSvcRef.current;
     const Place = window.google?.maps?.places?.Place;
@@ -99,7 +93,6 @@ export default function Recommend() {
     nextIds.forEach((pid) => {
       if (detailCache[pid]) return;
       (async () => {
-        // 1) 신형 Place.fetchFields()
         if (Place) {
           try {
             const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
@@ -120,7 +113,6 @@ export default function Recommend() {
             }
           } catch {/* no-op */}
         }
-        // 2) 구형 getDetails 폴백
         if (svc?.getDetails) {
           return svc.getDetails(
             { placeId: pid, fields: ['formatted_address','opening_hours','photos'] },
@@ -140,7 +132,7 @@ export default function Recommend() {
             }
           );
         }
-        // 3) 서버(Places API New HTTP) 폴백
+        // 서버 HTTP 폴백 (선택)
         try {
           const resp = await fetch(`/api/places/details?id=${encodeURIComponent(pid)}`);
           if (resp.ok) {
@@ -150,23 +142,20 @@ export default function Recommend() {
               [pid]: {
                 address: det?.formattedAddress || '',
                 openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
-                photoUrl: (() => {
-                  const ph = det?.photos?.[0];
-                  return ph?.name ? '' : ''; // HTTP 응답에는 직접 URL이 없을 수 있음(여기선 생략)
-                })(),
+                photoUrl: '',
               },
             }));
           }
-        } catch {/* no-op */}
+        } catch {}
       })();
     });
-  
+   
   }, [mapPreds]);
 
-  // 자동완성/텍스트/지오코더/HTTP 폴백으로 후보 가져오기
+  // 자동완성 + 폴백 검색
   const fetchMapPreds = (q) => {
     setMapSearch(q);
-    if (!q) { setMapPreds([]); setResultsOpen(false); return; }
+    if (!q) { setMapPreds([]); return; }
 
     const ac  = autocompleteRef.current;
     const svc = placesSvcRef.current;
@@ -183,11 +172,7 @@ export default function Recommend() {
         },
       }));
 
-    const show = (list) => {
-      const sliced = (list || []).slice(0, 8);
-      setMapPreds(sliced);
-      setResultsOpen(((q || '').trim().length > 0) && sliced.length > 0);
-    };
+    const show = (list) => setMapPreds((list || []).slice(0, 20));
 
     const doAutocomplete = () => new Promise((resolve) => {
       if (!ac) return resolve(false);
@@ -196,6 +181,24 @@ export default function Recommend() {
         resolve(false);
       });
     });
+
+    const doServerSearch = async () => {
+      try {
+        const resp = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`);
+        if (!resp.ok) return false;
+        const json = await resp.json();
+        const preds = (json?.places || []).map((r) => ({
+          place_id: r.id || r.place_id || null,
+          description: r.displayName?.text || r.formattedAddress || '',
+          structured_formatting: {
+            main_text: r.displayName?.text || r.name || '',
+            secondary_text: r.formattedAddress || r.vicinity || '',
+          },
+        }));
+        if (preds.length) { show(preds); return true; }
+        return false;
+      } catch { return false; }
+    };
 
     const doTextSearch = () => new Promise((resolve) => {
       if (!svc?.textSearch) return resolve(false);
@@ -215,32 +218,14 @@ export default function Recommend() {
 
     (async () => {
       if (await doAutocomplete()) return;
-      // 서버(Places API New) 폴백
-      const doServerSearch = async () => {
-        try {
-          const resp = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`);
-          if (!resp.ok) return false;
-          const json = await resp.json();
-          const preds = (json?.places || []).map((r) => ({
-            place_id: r.id || r.place_id || null,
-            description: r.displayName?.text || r.formattedAddress || '',
-            structured_formatting: {
-              main_text: r.displayName?.text || r.name || '',
-              secondary_text: r.formattedAddress || r.vicinity || '',
-            },
-          }));
-          if (preds.length) { show(preds); return true; }
-          return false;
-        } catch { return false; }
-      };
       if (await doServerSearch()) return;
       if (await doTextSearch())  return;
       if (await doGeocode())     return;
-      setMapPreds([]); setResultsOpen(false);
+      setMapPreds([]);
     })();
   };
 
-  // 후보 → 지도 중심 이동(핀 표시)
+  // 후보 클릭 → 지도 이동 + 핀
   const panToPred = async (pred) => {
     const Place = window.google?.maps?.places?.Place;
     const pid = pred?.place_id;
@@ -263,7 +248,7 @@ export default function Recommend() {
           setTempPin(pt);
           return;
         }
-      } catch {/* no-op */}
+      } catch {}
     }
 
     if (pid) {
@@ -279,7 +264,7 @@ export default function Recommend() {
             return;
           }
         }
-      } catch {/* no-op */}
+      } catch {}
     }
 
     const q = pred?.structured_formatting?.main_text || pred?.description;
@@ -297,96 +282,98 @@ export default function Recommend() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-green-700">관광지 검색</h2>
-      </div>
+    <div className="max-w-[1200px] mx-auto px-4 md:px-6 py-6">
+      <h2 className="text-xl md:text-2xl font-bold text-green-700 mb-4">관광지 검색</h2>
 
-      {/* 검색 인풋 */}
-      <div className="mb-3">
-        <div className="text-xs mb-1">지도에서 장소 찾기</div>
-        <input
-          value={mapSearch}
-          onChange={(e) => fetchMapPreds(e.target.value)}
-          onFocus={() => setResultsOpen(Boolean((mapSearch || '').trim()))}
-          placeholder="장소명을 입력하세요 (예: 도고온천, 디즈니랜드)"
-          className="w-full border rounded-lg px-3 py-2 text-sm"
-        />
-        <div className="relative my-2">
-          <div className="inline-block bg-zinc-200 text-zinc-700 text-xs px-3 py-2 rounded-2xl shadow-sm">
-            검색하면 아래 카드로 후보가 떠요. ‘지도보기’를 누르면 위치를 바로 확인할 수 있어요.
-          </div>
-          <div className="absolute -bottom-2 left-4 w-0 h-0 border-l-6 border-r-6 border-t-6 border-l-transparent border-r-transparent border-t-zinc-200" />
+      {/* 2/3 : 1/3 레이아웃 (모바일에선 1열, md 이상에서 2열) */}
+      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 md:gap-6">
+        {/* 왼쪽: 지도 (2/3) */}
+        <div className="rounded-xl overflow-hidden border min-h-[65vh]">
+          {isLoaded ? (
+            <GoogleMap
+              onLoad={onMapLoad}
+              onUnmount={onMapUnmount}
+              mapContainerStyle={{ width: '100%', height: '100%' }}
+              center={mapCenter}
+              zoom={mapZoom}
+              options={{
+                fullscreenControl: false,
+                streetViewControl: false,
+                mapTypeControl: false,
+                zoomControl: true,
+                gestureHandling: 'greedy',
+              }}
+            >
+              {tempPin && <Marker position={{ lat: tempPin.lat, lng: tempPin.lng }} />}
+            </GoogleMap>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">구글맵 로드 중…</div>
+          )}
         </div>
-      </div>
 
-      {/* 지도 */}
-      <div className="rounded-xl overflow-hidden border h-[360px]">
-        {isLoaded ? (
-          <GoogleMap
-            onLoad={onMapLoad}
-            onUnmount={onMapUnmount}
-            mapContainerStyle={{ width: '100%', height: '100%' }}
-            center={mapCenter}
-            zoom={mapZoom}
-            options={{
-              fullscreenControl: false,
-              streetViewControl: false,
-              mapTypeControl: false,
-              zoomControl: true,
-              gestureHandling: 'greedy',
-            }}
-            onClick={() => setResultsOpen(false)}
-          >
-            {tempPin && <Marker position={{ lat: tempPin.lat, lng: tempPin.lng }} />}
-          </GoogleMap>
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">구글맵 로드 중…</div>
-        )}
-      </div>
+        {/* 오른쪽: 검색/후보 (1/3) - sticky + 스크롤 */}
+        <aside className="md:sticky md:top-4 h-auto md:max-h-[65vh] md:overflow-auto">
+          {/* 검색 인풋 */}
+          <div className="mb-3">
+            <label className="text-xs text-zinc-600 mb-1 block">지도에서 장소 찾기</label>
+            <input
+              value={mapSearch}
+              onChange={(e) => fetchMapPreds(e.target.value)}
+              placeholder="장소명을 입력하세요 (예: 도고온천, 디즈니랜드)"
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+            />
+            <p className="mt-2 text-[11px] text-zinc-500">
+              검색하면 아래에 후보가 표시됩니다. 항목을 클릭하면 왼쪽 지도에서 위치를 바로 확인할 수 있어요.
+            </p>
+          </div>
 
-      {/* 후보 카드 리스트 */}
-      {resultsOpen && mapPreds.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {mapPreds.map((p) => {
-            const det = detailCache[p.place_id] || {};
-            const placeName = p.structured_formatting?.main_text || p.description;
-            const placeAddress = det.address || p.structured_formatting?.secondary_text;
+          {/* 후보 리스트 */}
+          <div className="space-y-2">
+            {mapPreds.length === 0 && (
+              <div className="text-sm text-zinc-500 border rounded-lg p-3">검색어를 입력해보세요.</div>
+            )}
 
-            return (
-              <div key={p.place_id || placeName} className="border rounded-xl bg-white p-3">
-                <div className="flex gap-3">
-                  {det.photoUrl ? (
-                    <img src={det.photoUrl} alt="thumb" className="w-16 h-16 rounded object-cover flex-none" />
-                  ) : (
-                    <div className="w-16 h-16 rounded bg-zinc-100 grid place-items-center text-[11px] text-zinc-400 flex-none">
-                      NO IMG
-                    </div>
-                  )}
+            {mapPreds.map((p) => {
+              const det = detailCache[p.place_id] || {};
+              const placeName = p.structured_formatting?.main_text || p.description;
+              const placeAddress = det.address || p.structured_formatting?.secondary_text;
 
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{placeName}</div>
-                    <div className="text-xs text-zinc-500 truncate">{placeAddress}</div>
-                    {det.openingHours && (
-                      <div className="text-[11px] text-zinc-400 mt-1">{summarizeTodayHours(det.openingHours)}</div>
+              return (
+                <button
+                  key={p.place_id || placeName}
+                  onClick={() => panToPred(p)}
+                  className="w-full text-left border rounded-xl bg-white p-3 hover:bg-zinc-50 transition"
+                >
+                  <div className="flex gap-3">
+                    {det.photoUrl ? (
+                      <img src={det.photoUrl} alt="thumb" className="w-14 h-14 rounded object-cover flex-none" />
+                    ) : (
+                      <div className="w-14 h-14 rounded bg-zinc-100 grid place-items-center text-[10px] text-zinc-400 flex-none">
+                        NO IMG
+                      </div>
                     )}
 
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={() => panToPred(p)}
-                        className="px-3 py-1.5 text-xs rounded-lg border"
-                      >
-                        지도보기
-                      </button>
-                      {/* 필요 시 다음 버튼 추가: “상세 열기”, “Google 지도 열기” 등 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm truncate">{placeName}</div>
+                      <div className="text-xs text-zinc-500 truncate">{placeAddress}</div>
+                      {det.openingHours && (
+                        <div className="text-[11px] text-zinc-400 mt-1">
+                          {summarizeTodayHours(det.openingHours)}
+                        </div>
+                      )}
+                      <div className="mt-2">
+                        <span className="inline-block text-[11px] px-2 py-1 rounded border">
+                          지도에서 보기
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
