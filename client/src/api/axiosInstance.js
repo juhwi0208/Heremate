@@ -17,7 +17,7 @@ const DEV_BASE =
   process.env.REACT_APP_API_BASE_URL ||   // ✅ CRA 기본 키도 허용
   'http://localhost:4000';
 
-const API_BASE = (process.env.NODE_ENV === 'production' ? (PROD_BASE || 'https://YOUR-API') : DEV_BASE)
+const API_BASE = (process.env.NODE_ENV === 'production' ? (PROD_BASE || process.env.REACT_APP_API_BASE_URL) : DEV_BASE)
   .replace(/\/$/, ''); // 끝 슬래시 제거
 
 const axios = axiosBase.create({
