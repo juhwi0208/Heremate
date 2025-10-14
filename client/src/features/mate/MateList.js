@@ -4,6 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import axios from '../../api/axiosInstance';
 
 const ALL_STYLES = ['자연','맛집','사진','쇼핑','예술','역사','체험','축제','휴식'];
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  process.env.REACT_APP_API_BASE_URL ||
+  "http://localhost:4000";
+
+const toAbs = (u) => {
+  if (!u) return "";
+  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, "")}${u}`;
+};
 
 const STYLE_COLOR = {
   '자연': 'bg-emerald-100 text-emerald-800',
@@ -230,7 +239,7 @@ export default function MateList() {
               <div className="mt-auto border-t border-slate-100 pt-4">
                 <div className="flex items-center gap-3">
                   <img
-                    src={p.avatarUrl || '/assets/avatar_placeholder.png'}
+                    src={toAbs(p.avatarUrl) || '/assets/avatar_placeholder.png'}
                     alt=""
                     className="w-9 h-9 rounded-full object-cover border border-white shadow"
                   />

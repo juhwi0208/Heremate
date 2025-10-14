@@ -1,6 +1,16 @@
 // client/src/features/chat/ChatSidebarList.js
 import React from 'react';
 
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  process.env.REACT_APP_API_BASE_URL ||
+  "http://localhost:4000";
+
+const toAbs = (u) => {
+  if (!u) return "";
+  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, "")}${u}`;
+};
+
 export default function ChatSidebarList({ rooms = [], loading = false, selectedId, onSelect }) {
   if (loading) {
     return (
@@ -20,7 +30,7 @@ export default function ChatSidebarList({ rooms = [], loading = false, selectedI
     <ul className="divide-y">
       {rooms.map(r => {
         const active = String(selectedId) === String(r.id);
-        const avatar = r.other_avatar_url || '';
+        const avatar = toAbs(r.other_avatar_url);
         const initial = r.other_nickname?.slice(0,1)?.toUpperCase() || '#';
 
         return (
@@ -33,7 +43,7 @@ export default function ChatSidebarList({ rooms = [], loading = false, selectedI
               {/* 1) 동그라미 → 상대 프로필 이미지 */}
               <div className="w-10 h-10 rounded-full bg-green-500/10 overflow-hidden flex items-center justify-center">
                 {avatar
-                  ? <img src={avatar} alt="상대 프로필" className="w-full h-full object-cover" />
+                  ? <img src={toAbs(avatar)} alt="상대 프로필" className="w-full h-full object-cover" />
                   : <span className="text-green-700 font-semibold">{initial}</span>}
               </div>
 

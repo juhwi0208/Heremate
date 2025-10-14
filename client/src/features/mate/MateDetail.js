@@ -14,6 +14,16 @@ const STYLE_COLOR = {
   '휴식': 'bg-slate-100 text-slate-800',
 };
 
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  process.env.REACT_APP_API_BASE_URL ||
+  "http://localhost:4000";
+
+const toAbs = (u) => {
+  if (!u) return "";
+  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, "")}${u}`;
+};
+
 function formatDateRange(start, end) {
   if (!start && !end) return '';
   const s = start ? new Date(start) : null;
@@ -154,7 +164,7 @@ export default function MateDetail() {
           <footer className="px-6 py-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img
-                src={post.avatarUrl || '/assets/avatar_placeholder.png'}
+                src={toAbs(post.avatarUrl) || '/assets/avatar_placeholder.png'}
                 alt="작성자"
                 className="w-9 h-9 rounded-full object-cover border border-white shadow"
               />

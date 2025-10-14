@@ -6,6 +6,16 @@ import { jwtDecode } from 'jwt-decode';
 
 const SCROLL_THRESHOLD = 16; // 바닥 판정 여유(px)
 
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  process.env.REACT_APP_API_BASE_URL ||
+  "http://localhost:4000";
+
+const toAbs = (u) => {
+  if (!u) return "";
+  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, "")}${u}`;
+};
+
 export default function ChatRoom({ roomIdOverride, embed = false, roomMeta, onRead }) {
 
   const params = useParams();
@@ -43,7 +53,7 @@ export default function ChatRoom({ roomIdOverride, embed = false, roomMeta, onRe
     try { meId = jwtDecode(token)?.id || null; } catch { meId = null; }
   }  
   const isOtherInactive = !!(roomMeta && roomMeta.other_active === 0);
-  const avatar = roomMeta?.other_avatar_url || '';
+  const avatar = toAbs(roomMeta?.other_avatar_url);
   const initial = roomMeta?.other_nickname?.slice(0,1)?.toUpperCase() || '#';
 
   // -------- 스크롤 유틸 --------
@@ -239,7 +249,7 @@ export default function ChatRoom({ roomIdOverride, embed = false, roomMeta, onRe
       <div className="px-4 py-3 border-b bg-green-50/60 flex items-center gap-3">
         <div className="w-9 h-9 rounded-full bg-green-500/10 overflow-hidden flex items-center justify-center">
           {avatar
-            ? <img src={avatar} alt="상대 프로필" className="w-full h-full object-cover" />
+            ? <img src={toAbs(avatar)} alt="상대 프로필" className="w-full h-full object-cover" />
             : <span className="text-green-700 font-semibold text-sm">{initial}</span>}
         </div>
         <div className="min-w-0">

@@ -12,6 +12,16 @@ import {
 } from "lucide-react";
 import axios from "../api/axiosInstance";
 
+const API_BASE =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  process.env.REACT_APP_API_BASE_URL ||
+  "http://localhost:4000";
+
+const toAbs = (u) => {
+  if (!u) return "";
+  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, "")}${u}`;
+};
+
 /* 공용 RowItem */
 function RowItem({ title, desc, actionLabel, onAction, disabled, titleAttr }) {
   return (
@@ -227,13 +237,19 @@ export default function MyPage({ setUser }) {
         form.append("bio", profile.bio || "");
         if (fileRef.current?.files?.[0]) form.append("avatar", fileRef.current.files[0]);
 
-        const { data } = await axios.put("/api/users/me", form, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        const newUrl = data?.avatarUrl || avatarPreview;
-        if (newUrl) setProfile((p) => ({ ...p, avatarUrl: newUrl }));
-        if (typeof setUser === "function")
-          setUser((u) => ({ ...u, nickname: profile.nickname, avatarUrl: newUrl || u?.avatarUrl }));
+        // axios는 FormData 사용 시 Content-Type 헤더 자동 설정(경계값 포함)
+        const { data } = await axios.put("/api/users/me", form);
+
+        // 서버가 avatarUrl을 안 돌려줘도, 미리보기/기존 값을 사용
+        const rawUrl = data?.avatarUrl || avatarPreview || profile.avatarUrl || "";
+        // 캐시 무효화용 쿼리스트링 (업로드 직후 반영 안 될 때 대비)
+        const bust = rawUrl ? `${rawUrl}${rawUrl.includes("?") ? "&" : "?"}v=${Date.now()}` : "";
+        const abs = toAbs(bust || rawUrl);
+
+        setProfile((p) => ({ ...p, avatarUrl: abs }));
+        if (typeof setUser === "function") {
+          setUser((u) => ({ ...u, nickname: profile.nickname, avatarUrl: abs || u?.avatarUrl }));
+        }
         originalNickRef.current = profile.nickname;
         alert("프로필이 저장되었습니다.");
       } catch (err) {
@@ -243,7 +259,7 @@ export default function MyPage({ setUser }) {
         setSaving(false);
       }
     },
-    [saving, nickState, profile, avatarPreview, setUser]
+    [saving, nickState.valid, nickState.checking, profile.nickname, profile.bio, profile.avatarUrl, avatarPreview, setUser]
   );
 
   const isKakaoCreated = !profile.hasPassword;
@@ -290,7 +306,7 @@ export default function MyPage({ setUser }) {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <img
-                    src={avatarPreview || profile.avatarUrl || "/assets/avatar_placeholder.png"}
+                    src={avatarPreview || toAbs(profile.avatarUrl) || "/assets/avatar_placeholder.png"}
                     alt="avatar"
                     className="h-16 w-16 rounded-full object-cover ring-1 ring-zinc-200"
                   />
@@ -352,7 +368,7 @@ export default function MyPage({ setUser }) {
               <label className="mb-2 block text-sm text-zinc-700">프로필 이미지</label>
               <div className="mb-6 flex items-center gap-3">
                 <img
-                  src={avatarPreview || profile.avatarUrl || "/assets/avatar_placeholder.png"}
+                  src={avatarPreview || toAbs(profile.avatarUrl) || "/assets/avatar_placeholder.png"}
                   alt="avatar-mini"
                   className="h-10 w-10 rounded-full object-cover ring-1 ring-zinc-200"
                 />
@@ -594,7 +610,7 @@ function MatesSection({ myId }) {
         if (!mounted) return;
         const mineId = myId || me?.id;
         const filtered = (Array.isArray(data) ? data : []).filter((p) => {
-          const authorId = p.user_id ?? p.author_id ?? p.userId ?? p.owner_id;
+          const authorId = p.user_id ?? p.author_id ?? p.userId ?? p.owner_id ?? p.writer_id;
           return authorId === mineId;
         });
         setItems(filtered);
