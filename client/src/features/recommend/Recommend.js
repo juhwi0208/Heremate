@@ -1,6 +1,7 @@
 // client/src/features/recommend/Recommend.js
-// 2/3 지도 + 1/3 검색/후보 패널 레이아웃
-// "이름이 주소로 뜨는 문제" 해결(항상 name/displayName/main_text를 제목으로 사용)
+// 2/3 지도 + 1/3 검색/후보 패널
+// 이름은 항상 name/displayName/main_text 우선
+// 사진은 Place.fetchFields()의 place 인스턴스에서 읽고 getURI/getUrl/getURL 모두 시도
 
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
@@ -51,7 +52,6 @@ function summarizeTodayHours(openingHours) {
 }
 
 export default function Recommend() {
-  // 기본 서울 중심
   const [mapCenter, setMapCenter] = useState({ lat: 37.5665, lng: 126.9780 });
   const [mapZoom, setMapZoom] = useState(12);
 
@@ -61,19 +61,15 @@ export default function Recommend() {
     version: 'weekly',
   });
 
-  // Google 객체/서비스 핸들러
   const mapRef = useRef(null);
   const placesSvcRef = useRef(null);
   const geocoderRef = useRef(null);
   const autocompleteRef = useRef(null);
   const sessionTokenRef = useRef(null);
 
-  // 검색/후보/상세 캐시
   const [mapSearch, setMapSearch] = useState('');
   const [mapPreds, setMapPreds] = useState([]); // {place_id, main_text, secondary_text}
   const [detailCache, setDetailCache] = useState({}); // { [place_id]: { title, address, openingHours, photoUrl } }
-
-  // 지도 임시 핀
   const [tempPin, setTempPin] = useState(null);
 
   // Map 초기화
@@ -101,29 +97,33 @@ export default function Recommend() {
       if (!pid || detailCache[pid]) return;
 
       (async () => {
-        // 1) 신형 Place.fetchFields()
+        // 1) 신형 Place.fetchFields() → 값이 아니라 place 인스턴스를 채움
         if (Place) {
           try {
             const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-            const det = await place.fetchFields({
+            await place.fetchFields({
               fields: ['displayName','name','formattedAddress','regularOpeningHours','photos'],
             });
-            if (det) {
-              const p = det.photos?.[0];
-              let photoUrl = '';
-              try { photoUrl = p?.getURL ? p.getURL({ maxWidth: 400, maxHeight: 300 }) : ''; } catch {}
-              setDetailCache((prev) => ({
-                ...prev,
-                [pid]: {
-                  title: det.displayName?.text || det.name || '',
-                  address: det.formattedAddress || '',
-                  openingHours: normalizeOpeningHours(det.regularOpeningHours || null),
-                  photoUrl,
-                },
-              }));
-              return;
-            }
-          } catch {/* no-op */}
+
+            const p = place.photos?.[0];
+            let photoUrl = '';
+            try {
+              if (p?.getURI)      photoUrl = p.getURI({ maxWidth: 400, maxHeight: 300 });
+              else if (p?.getUrl) photoUrl = p.getUrl({ maxWidth: 400, maxHeight: 300 });
+              else if (p?.getURL) photoUrl = p.getURL({ maxWidth: 400, maxHeight: 300 });
+            } catch {}
+
+            setDetailCache((prev) => ({
+              ...prev,
+              [pid]: {
+                title: place.displayName?.text || place.name || '',
+                address: place.formattedAddress || '',
+                openingHours: normalizeOpeningHours(place.regularOpeningHours || null),
+                photoUrl,
+              },
+            }));
+            return; // 성공 시 여기서 종료
+          } catch {}
         }
 
         // 2) 구형 getDetails 폴백
@@ -134,7 +134,11 @@ export default function Recommend() {
               if (st !== window.google.maps.places.PlacesServiceStatus.OK || !det) return;
               const p = det.photos?.[0];
               let photoUrl = '';
-              try { photoUrl = p?.getUrl ? p.getUrl({ maxWidth: 400, maxHeight: 300 }) : ''; } catch {}
+              try {
+                if (p?.getURI)      photoUrl = p.getURI({ maxWidth: 400, maxHeight: 300 });
+                else if (p?.getUrl) photoUrl = p.getUrl({ maxWidth: 400, maxHeight: 300 });
+                else if (p?.getURL) photoUrl = p.getURL({ maxWidth: 400, maxHeight: 300 });
+              } catch {}
               setDetailCache((prev) => ({
                 ...prev,
                 [pid]: {
@@ -159,13 +163,15 @@ export default function Recommend() {
                 title: det?.displayName?.text || det?.name || '',
                 address: det?.formattedAddress || '',
                 openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
-                photoUrl: '',
+                photoUrl: det?.photoUrl || '',
               },
             }));
           }
-        } catch {/* no-op */}
+        } catch {}
       })();
     });
+    // 의존성 경고를 피하려면 mapPreds, detailCache만 외부 의존
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapPreds]);
 
   // 자동완성/텍스트/지오코더/HTTP 폴백으로 후보 가져오기 (이름 우선 정규화)
@@ -189,7 +195,7 @@ export default function Recommend() {
           language: 'ko',
           region: 'KR',
           sessionToken: token,
-          types: ['establishment'], // 주소(geocode) 남발 방지. 필요시 'tourist_attraction' 추가.
+          types: ['establishment'], // 필요시 'tourist_attraction' 추가
         },
         (list, status) => {
           if (status === 'OK' && Array.isArray(list) && list.length) {
@@ -224,7 +230,7 @@ export default function Recommend() {
       } catch { return false; }
     };
 
-    // 3) TextSearch (이름 → 주소 보조)
+    // 3) TextSearch
     const doTextSearch = () => new Promise((resolve) => {
       if (!svc?.textSearch) return resolve(false);
       svc.textSearch({ query: q, language: 'ko', region: 'KR' }, (res, st) => {
@@ -242,7 +248,7 @@ export default function Recommend() {
       });
     });
 
-    // 4) Geocoder (마지막 수단 — 주소 라벨)
+    // 4) Geocoder (주소 라벨)
     const doGeocode = () => new Promise((resolve) => {
       if (!gc) return resolve(false);
       gc.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
@@ -283,16 +289,16 @@ export default function Recommend() {
 
     if (Place && pid) {
       try {
-        const det = await new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' })
-          .fetchFields({ fields: ['location'] });
-        const pt = pickLatLng(det?.location);
+        const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
+        await place.fetchFields({ fields: ['location'] });
+        const pt = pickLatLng(place?.location);
         if (pt) {
           setMapCenter(pt); setMapZoom(15);
           mapRef.current?.panTo(pt);
           setTempPin(pt);
           return;
         }
-      } catch {/* no-op */}
+      } catch {}
     }
 
     if (pid) {
@@ -308,7 +314,7 @@ export default function Recommend() {
             return;
           }
         }
-      } catch {/* no-op */}
+      } catch {}
     }
 
     const q = pred?.main_text;
@@ -329,9 +335,8 @@ export default function Recommend() {
     <div className="max-w-[1200px] mx-auto px-4 md:px-6 py-6">
       <h2 className="text-xl md:text-2xl font-bold text-green-700 mb-4">관광지 검색</h2>
 
-      {/* 2/3 : 1/3 레이아웃 (모바일 1열, md 이상 2열) */}
       <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 md:gap-6">
-        {/* 왼쪽: 지도 (2/3) */}
+        {/* 왼쪽: 지도 */}
         <div className="rounded-xl overflow-hidden border min-h-[65vh]">
           {isLoaded ? (
             <GoogleMap
@@ -355,9 +360,8 @@ export default function Recommend() {
           )}
         </div>
 
-        {/* 오른쪽: 검색/후보 (1/3) - sticky + 스크롤 */}
+        {/* 오른쪽: 검색/후보 */}
         <aside className="md:sticky md:top-4 h-auto md:max-h-[65vh] md:overflow-auto">
-          {/* 검색 인풋 */}
           <div className="mb-3">
             <label className="text-xs text-zinc-600 mb-1 block">지도에서 장소 찾기</label>
             <input
@@ -371,7 +375,6 @@ export default function Recommend() {
             </p>
           </div>
 
-          {/* 후보 리스트 */}
           <div className="space-y-2">
             {mapPreds.length === 0 && (
               <div className="text-sm text-zinc-500 border rounded-lg p-3">검색어를 입력해보세요.</div>
@@ -396,7 +399,6 @@ export default function Recommend() {
                         NO IMG
                       </div>
                     )}
-
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{placeName}</div>
                       <div className="text-xs text-zinc-500 truncate">{placeAddress}</div>
@@ -406,9 +408,7 @@ export default function Recommend() {
                         </div>
                       )}
                       <div className="mt-2">
-                        <span className="inline-block text-[11px] px-2 py-1 rounded border">
-                          지도에서 보기
-                        </span>
+                        <span className="inline-block text-[11px] px-2 py-1 rounded border">지도에서 보기</span>
                       </div>
                     </div>
                   </div>

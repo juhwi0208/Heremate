@@ -580,8 +580,9 @@ export default function PlanEditor() {
               (async () => {
                 try {
                   const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-                  const det = await place.fetchFields({ fields: ['id','displayName','formattedAddress','location','regularOpeningHours','photos','geometry','name','place_id','opening_hours'] });
-                  if (det) { apply(det); return resolve({ ok:true }); }
+                  await place.fetchFields({ fields: ['id','displayName','formattedAddress','location','regularOpeningHours','photos','geometry','name','place_id','opening_hours'] });
+                  apply(place);
+                  return resolve({ ok:true });
                 } catch {}
                 resolve({ ok:false });
               })();
@@ -835,22 +836,20 @@ export default function PlanEditor() {
         if (Place) {
           try {
             const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-            const det = await place.fetchFields({ fields: ['formattedAddress','regularOpeningHours','photos'] });
-            if (det) {
-              const p = det.photos?.[0];
-              let photoUrl = '';
-              try { photoUrl = p?.getURL ? p.getURL({ maxWidth: 400, maxHeight: 300 }) : ''; } catch {}
-              setDetailCache((prev) => ({
-                ...prev,
-                [pid]: {
-                  address: det.formattedAddress || '',
-                  openingHours: normalizeOpeningHours(det.regularOpeningHours || null),
-
-                  photoUrl,
-                },
-              }));
-              return;
-            }
+            await place.fetchFields({ fields: ['formattedAddress','regularOpeningHours','photos'] });
+            const p = place.photos?.[0];
+            const photoUrl =
+              (p?.getURI?.({ maxWidth: 400, maxHeight: 300 })) ||
+              (p?.getUrl?.({ maxWidth: 400, maxHeight: 300 })) || '';
+            setDetailCache((prev) => ({
+              ...prev,
+              [pid]: {
+                address: place.formattedAddress || '',
+                openingHours: normalizeOpeningHours(place.regularOpeningHours || null),
+                photoUrl,
+              },
+            }));
+            return;
           } catch {}
         }
 
@@ -903,44 +902,52 @@ export default function PlanEditor() {
     const pid = pred?.place_id;
     const Place = window.google?.maps?.places?.Place;
 
-    if (pid) {
-      if (Place) {
-        try {
-          const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-          const det = await place.fetchFields({
-            fields: ['id','displayName','formattedAddress','location','regularOpeningHours','photos','name','place_id']
-          });
-          if (det) {
-            await findPlaceAndUpdate(newId, det);
-            setMapSearch(''); setMapPreds([]); setResultsOpen(false);
-            setTempPin(null);
-            return;
-          }
-        } catch {}
-      }
-      if (placesSvcRef.current?.getDetails) {
-        return placesSvcRef.current.getDetails(
-          { placeId: pid, fields: ['name','formatted_address','geometry','place_id','opening_hours','photos'] },
-          async (det, st) => {
-            if (st === window.google.maps.places.PlacesServiceStatus.OK && det) {
-              await findPlaceAndUpdate(newId, det);
-            } else {
-              const label = pred.structured_formatting?.main_text || pred.description || mapSearch;
-              await findPlaceAndUpdate(newId, label);
-            }
-            setMapSearch(''); setMapPreds([]); setResultsOpen(false);
-            setTempPin(null);
-          }
-        );
+    // 1) New Places 경로 (권장)
+    if (pid && Place) {
+      try {
+        const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
+        await place.fetchFields({
+          fields: ['id','displayName','formattedAddress','location','regularOpeningHours','photos','name','place_id']
+        });
+        await findPlaceAndUpdate(newId, place);
+
+        setMapSearch('');
+        setMapPreds([]);
+        setResultsOpen(false);
+        setTempPin(null);
+        return; // 성공 시 여기서 종료
+      } catch (e) {
+        // 실패 시 레거시로 폴백 (아래로 진행)
       }
     }
 
+    // 2) 레거시 PlacesService 경로 (폴백)
+    if (pid && placesSvcRef.current?.getDetails) {
+      return placesSvcRef.current.getDetails(
+        { placeId: pid, fields: ['name','formatted_address','geometry','place_id','opening_hours','photos'] },
+        async (det, st) => {
+          if (st === window.google.maps.places.PlacesServiceStatus.OK && det) {
+            await findPlaceAndUpdate(newId, det);
+          } else {
+            const label = pred.structured_formatting?.main_text || pred.description || mapSearch;
+            await findPlaceAndUpdate(newId, label);
+          }
+          setMapSearch('');
+          setMapPreds([]);
+          setResultsOpen(false);
+          setTempPin(null);
+        }
+      );
+    }
+
+    // 3) 최종 폴백 (pid 없거나 둘 다 실패)
     const label = pred.structured_formatting?.main_text || pred.description || mapSearch;
     await findPlaceAndUpdate(newId, label);
-    setMapSearch(''); setMapPreds([]); setResultsOpen(false);
+    setMapSearch('');
+    setMapPreds([]);
+    setResultsOpen(false);
     setTempPin(null);
   };
-
 
   // panToPred를 아래 형태로 수정 (핵심: setMapCenter / setMapZoom도 호출)
   // panToPred를 아래 형태로 교체
@@ -966,9 +973,9 @@ export default function PlanEditor() {
     // 1) 신형 Place → location
     if (Place && pid) {
       try {
-        const det = await new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' })
-          .fetchFields({ fields: ['location'] });
-        const pt = pickLatLng(det?.location);
+        const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
+        await place.fetchFields({ fields: ['location'] });
+        const pt = pickLatLng(place?.location);
         if (pt) {
           // ✅ panTo + state(center/zoom) 동기화
           setMapCenter?.(pt);
