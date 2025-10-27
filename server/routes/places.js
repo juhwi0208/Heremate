@@ -4,103 +4,161 @@ const axios = require('axios');
 const router = express.Router();
 
 const API_KEY = process.env.GCP_API_KEY;
-if (!API_KEY) {
-  console.warn('[places] GCP_API_KEY not set. Set process.env.GCP_API_KEY');
+
+// 공통 헤더
+const headers = (fieldMask) => ({
+  'X-Goog-Api-Key': API_KEY,
+  'X-Goog-FieldMask': fieldMask,
+});
+
+// 🔹 전역/바이어스 구성
+function buildLocationBias({ lat, lng, radius, global }) {
+  if (global) return undefined; // 전세계 검색
+  const r = Math.max(1000, Math.min(Number(radius) || 500000, 1000000)); // 1km~1000km
+  return {
+    circle: {
+      center: { latitude: Number(lat) || 37.5665, longitude: Number(lng) || 126.9780 },
+      radius: r,
+    },
+  };
 }
 
-// ✔ Text Search 용 헤더 (places.* 접두사 필요)
-const SEARCH_HEADERS = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'X-Goog-Api-Key': API_KEY,
-  'X-Goog-FieldMask': [
-    'places.id',
-    'places.displayName',
-    'places.formattedAddress',
-    'places.location',
-    'places.regularOpeningHours',
-    'places.photos',
-    'places.googleMapsUri',
-  ].join(','),
-};
-
-// ✔ Details 용 헤더 (접두사 없이 단일 필드)
-const DETAILS_HEADERS = {
-  'X-Goog-Api-Key': API_KEY,
-  'X-Goog-FieldMask': [
-    'id',
-    'displayName',
-    'formattedAddress',
-    'location',
-    'regularOpeningHours',
-    'photos',
-    'googleMapsUri',
-  ].join(','),
-};
-
-// --- Text Search ---
-router.get('/search', async (req, res) => {
+// ✅ 자동완성
+// GET /api/places/autocomplete?q=...&lat=..&lng=..&radius=..&global=1
+router.get('/autocomplete', async (req, res) => {
   try {
-    const q = (req.query.q || '').toString().trim();
-    if (!q) return res.status(400).json({ error: 'q required' });
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ predictions: [] });
+
+    const lat = Number(req.query.lat || 37.5665);
+    const lng = Number(req.query.lng || 126.9780);
+    const radius = Number(req.query.radius || 500000);
+    const global = String(req.query.global || '1') === '1';
+
+    const body = {
+      input: q,
+      languageCode: 'ko',
+      regionCode: 'KR',
+    };
+    const bias = buildLocationBias({ lat, lng, radius, global });
+    if (bias) body.locationBias = bias;
+
+    const fieldMask = [
+      'suggestions.placePrediction.placeId',
+      'suggestions.placePrediction.text',
+      'suggestions.placePrediction.structuredFormat',
+    ].join(',');
 
     const { data } = await axios.post(
-      'https://places.googleapis.com/v1/places:searchText',
-      {
-        textQuery: q,
-        languageCode: 'ko',
-        regionCode: 'KR',
-        // locationBias 등 필요시 추가
-      },
-      { headers: SEARCH_HEADERS, timeout: 10000 }
+      'https://places.googleapis.com/v1/places:autocomplete',
+      body,
+      { headers: headers(fieldMask) }
     );
 
-    const places = (data?.places || []).map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      formattedAddress: p.formattedAddress,
-      location: p.location, // { latitude, longitude }
-      regularOpeningHours: p.regularOpeningHours || null,
-      photos: p.photos || [],
-      googleMapsUri: p.googleMapsUri || '',
-    }));
+    // v3 응답을 클라에서 쓰기 쉬운 형태로 변환
+    const predictions = (data?.suggestions || []).map((s) => {
+      const p = s.placePrediction || {};
+      // v3는 placeId가 이미 'places/...' 리소스 이름
+      const id = p.placeId || null;
+      const main = p.structuredFormat?.mainText?.text || p.text?.text || '';
+      const secondary = p.structuredFormat?.secondaryText?.text || '';
+      return {
+        place_id: id, // 그대로 사용 (places/…)
+        description: secondary ? `${main}, ${secondary}` : main,
+        structured_formatting: {
+          main_text: main,
+          secondary_text: secondary,
+        },
+      };
+    });
 
-    return res.json({ places });
+    res.json({ predictions });
   } catch (e) {
-    const status = e?.response?.status;
-    const detail = e?.response?.data || e.message;
-    console.error('[places:search]', status, detail);
-    return res.status(502).json({ error: 'places search failed', status, detail });
+    console.error('[places:autocomplete]', e?.response?.status, e?.response?.data || e.message);
+    res.status(500).json({ error: 'places autocomplete failed' });
   }
 });
 
-// --- Details (단일 place) ---
+// ✅ 텍스트 검색 (v3)
+// GET /api/places/search?q=...&lat=..&lng=..&radius=..&global=1
+router.get('/search', async (req, res) => {
+  const q = (req.query.q || '').toString().trim();
+  if (!q) return res.status(400).json({ error: 'q required' });
+
+  try {
+    const lat = Number(req.query.lat || 37.5665);
+    const lng = Number(req.query.lng || 126.9780);
+    const radius = Number(req.query.radius || 500000);
+    const global = String(req.query.global || '1') === '1';
+
+    const body = {
+      textQuery: q,
+      languageCode: 'ko',
+      regionCode: 'KR',
+    };
+    const bias = buildLocationBias({ lat, lng, radius, global });
+    if (bias) body.locationBias = bias;
+
+    const { data } = await axios.post(
+      'https://places.googleapis.com/v1/places:searchText',
+      body,
+      {
+        headers: headers(
+          [
+            'places.id',
+            'places.displayName',
+            'places.formattedAddress',
+            'places.location',
+            'places.regularOpeningHours',
+          ].join(',')
+        ),
+      }
+    );
+
+    res.json(data);
+  } catch (e) {
+    console.error('[places:search]', e?.response?.status, e?.response?.data || e.message);
+    res.status(500).json({ error: 'places search failed' });
+  }
+});
+
 router.get('/details', async (req, res) => {
   try {
-    const id = (req.query.id || '').toString().trim();
+    const id = String(req.query.id || '').trim();
     if (!id) return res.status(400).json({ error: 'id required' });
 
-    const url =
-      `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}` +
-      `?languageCode=ko&regionCode=KR`;
+    // v3 place fetch
+    const fields = [
+      'id',
+      'displayName',
+      'formattedAddress',
+      'regularOpeningHours',
+      'photos'
+    ].join(',');
 
-    const { data } = await axios.get(url, { headers: DETAILS_HEADERS, timeout: 10000 });
+    const { data: place } = await axios.get(
+      `https://places.googleapis.com/v1/${encodeURIComponent(id)}`,
+      { headers: { 'X-Goog-Api-Key': API_KEY, 'X-Goog-FieldMask': fields } }
+    );
 
-    const det = {
-      id: data.id,
-      displayName: data.displayName,
-      formattedAddress: data.formattedAddress,
-      location: data.location, // { latitude, longitude }
-      regularOpeningHours: data.regularOpeningHours || null,
-      photos: data.photos || [],
-      googleMapsUri: data.googleMapsUri || '',
-    };
+    // 대표 사진 URL 만들기 (redirect 미디어 엔드포인트)
+    let photoUrl = '';
+    const ph = place?.photos?.[0];
+    if (ph?.name) {
+      // 예: places/XXXX/photos/YYY → media
+      photoUrl = `https://places.googleapis.com/v1/${encodeURIComponent(ph.name)}/media?maxWidthPx=640&key=${API_KEY}`;
+    }
 
-    return res.json(det);
+    res.json({
+      id: place?.id || id,
+      displayName: place?.displayName,
+      formattedAddress: place?.formattedAddress || '',
+      regularOpeningHours: place?.regularOpeningHours || null,
+      photoUrl,
+    });
   } catch (e) {
-    const status = e?.response?.status;
-    const detail = e?.response?.data || e.message;
-    console.error('[places:details]', status, detail);
-    return res.status(502).json({ error: 'places details failed', status, detail });
+    console.error('[places:details]', e?.response?.status, e?.response?.data || e.message);
+    res.status(500).json({ error: 'places details failed' });
   }
 });
 

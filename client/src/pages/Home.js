@@ -35,7 +35,7 @@ const Home = () => {
       </section>
 
       {/* 여행 메이트 게시글 */}
-      <section className="py-16 px-6 md:px-20">
+      <section className="py-10 px-6 md:px-20">
         <h2 className="text-2xl font-bold mb-8">여행 메이트 게시글</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* 이 부분은 추후 map(post => ...)으로 대체 */}
@@ -46,27 +46,8 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 여행 스토리 */}
-      <section className="bg-[#E2F6CB] py-16 px-6 md:px-20">
-        <h2 className="text-2xl font-bold mb-8">여행 스토리</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <img src="/assets/story1.jpg" alt="스토리1" className="rounded-xl" />
-            <p className="mt-2 text-sm text-gray-600">25.01.23 ~ 25.01.28 일본 삿포로</p>
-          </div>
-          <div>
-            <img src="/assets/story2.jpg" alt="스토리2" className="rounded-xl" />
-            <p className="mt-2 text-sm text-gray-600">25.01.23 ~ 25.01.28 캐나다 밴프</p>
-          </div>
-          <div>
-            <img src="/assets/story3.jpg" alt="스토리3" className="rounded-xl" />
-            <p className="mt-2 text-sm text-gray-600">25.04.23 ~ 25.01.28 대만 타이베이</p>
-          </div>
-        </div>
-      </section>
-
       {/* 여행 계획 */}
-      <section className="py-16 px-6 md:px-20">
+      <section className="bg-[#E2F6CB] py-16 px-6 md:px-20">
         <h2 className="text-2xl font-bold mb-8">여행 계획</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* 추후 map으로 대체 */}
@@ -100,6 +81,27 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {/* 여행 스토리 */}
+      <section className="py-16 px-6 md:px-20">
+        <h2 className="text-2xl font-bold mb-8">여행 스토리</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <img src="/assets/story1.jpg" alt="스토리1" className="rounded-xl" />
+            <p className="mt-2 text-sm text-gray-600">25.01.23 ~ 25.01.28 일본 삿포로</p>
+          </div>
+          <div>
+            <img src="/assets/story2.jpg" alt="스토리2" className="rounded-xl" />
+            <p className="mt-2 text-sm text-gray-600">25.01.23 ~ 25.01.28 캐나다 밴프</p>
+          </div>
+          <div>
+            <img src="/assets/story3.jpg" alt="스토리3" className="rounded-xl" />
+            <p className="mt-2 text-sm text-gray-600">25.04.23 ~ 25.01.28 대만 타이베이</p>
+          </div>
+        </div>
+      </section>
+
+      
     </div>
   );
 };

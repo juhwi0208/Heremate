@@ -21,7 +21,7 @@ const Header = ({ user, setUser }) => {
   };
 
   return (
-    <header className="flex justify-between items-center px-6 py-3 bg-white shadow-md">
+    <header className="flex justify-between items-center px-6 py-3 bg-white">
       <div className="text-xl font-bold text-green-600 cursor-pointer" onClick={() => navigate('/')}>HereMate</div>
 
       {/* 🟢 NavLink로 교체 + isActive 하이라이트 */}

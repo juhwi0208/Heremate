@@ -1,7 +1,9 @@
 // client/src/features/recommend/Recommend.js
-// 2/3 지도 + 1/3 검색/후보 패널
-// 이름은 항상 name/displayName/main_text 우선
-// 사진은 Place.fetchFields()의 place 인스턴스에서 읽고 getURI/getUrl/getURL 모두 시도
+// Recommend 후보 썸네일 안정화: 
+//  - v1 전용 후보는 서버 디테일 → (사진 없으면) JS TextSearch로 place_id 역추적 후 사진 확보
+//  - 렌더링 캐시 키 우선순위: id_v1 → place_id
+//  - 사진 추출은 getURI → getUrl → getURL 순으로 시도
+//  - 디버그 로그 추가
 
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
@@ -14,7 +16,7 @@ function normalizeOpeningHours(src) {
     const base = src.regularOpeningHours || src;
     const toHHMM = (x) => {
       if (!x) return '0000';
-      if (typeof x.time === 'string') return x.time;
+      if (typeof x.time === 'string') return x.time; // 'HHMM'
       const h = String(x.hour ?? 0).padStart(2, '0');
       const m = String(x.minute ?? 0).padStart(2, '0');
       return `${h}${m}`;
@@ -24,9 +26,7 @@ function normalizeOpeningHours(src) {
       close: p.close ? { day: p.close.day, time: toHHMM(p.close) } : undefined,
     }));
     return periods.length ? { periods } : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function summarizeTodayHours(openingHours) {
@@ -40,15 +40,13 @@ function summarizeTodayHours(openingHours) {
         return od === wd || cd === wd || (od <= wd && wd <= cd);
       })
       .map((p) => {
+        const fmt = (t) => `${t.slice(0,2)}:${t.slice(2)}`;
         const ot = p.open?.time || '0000';
         const ct = p.close?.time || '2400';
-        const fmt = (t) => `${t.slice(0, 2)}:${t.slice(2)}`;
         return `${fmt(ot)}–${fmt(ct)}`;
       });
     return today.length ? `오늘 영업: ${today.join(', ')}` : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 export default function Recommend() {
@@ -63,118 +61,160 @@ export default function Recommend() {
 
   const mapRef = useRef(null);
   const placesSvcRef = useRef(null);
-  const geocoderRef = useRef(null);
+  const geocoderRef  = useRef(null);
   const autocompleteRef = useRef(null);
   const sessionTokenRef = useRef(null);
 
+  // 검색 상태/캐시
   const [mapSearch, setMapSearch] = useState('');
-  const [mapPreds, setMapPreds] = useState([]); // {place_id, main_text, secondary_text}
-  const [detailCache, setDetailCache] = useState({}); // { [place_id]: { title, address, openingHours, photoUrl } }
+  const [mapPreds, setMapPreds]   = useState([]); // [{ place_id?, id_v1?, main_text, secondary_text }]
+  const [detailCache, setDetailCache] = useState({}); // { [id]: {title,address,openingHours,photoUrl} }
   const [tempPin, setTempPin] = useState(null);
 
-  // Map 초기화
   const onMapLoad = (m) => {
     mapRef.current = m;
     if (window.google?.maps) {
-      if (!placesSvcRef.current) {
-        const anchor = m || document.createElement('div');
-        placesSvcRef.current = new window.google.maps.places.PlacesService(anchor);
-      }
-      if (!geocoderRef.current) geocoderRef.current = new window.google.maps.Geocoder();
+      const anchor = m || document.createElement('div');
+      if (!placesSvcRef.current) placesSvcRef.current = new window.google.maps.places.PlacesService(anchor);
+      if (!geocoderRef.current)  geocoderRef.current  = new window.google.maps.Geocoder();
       if (!autocompleteRef.current) autocompleteRef.current = new window.google.maps.places.AutocompleteService();
       if (!sessionTokenRef.current) sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
     }
   };
-  const onMapUnmount = () => { mapRef.current = null; };
 
-  // 후보 상세(주소/영업/사진/제목) 미리 캐시
+  // 후보가 바뀌면 상세(특히 사진)를 채움
   useEffect(() => {
-    const svc = placesSvcRef.current;
+    const svc   = placesSvcRef.current;
     const Place = window.google?.maps?.places?.Place;
-    const nextIds = new Set(mapPreds.map((p) => p.place_id).filter(Boolean));
 
-    nextIds.forEach((pid) => {
+    const byPid = mapPreds.filter((p) => p.place_id);
+    const byV1  = mapPreds.filter((p) => p.id_v1 && !p.place_id); // v1만 가진 후보
+
+    // 1) place_id 보유 후보: JS SDK → (실패 시) 서버 폴백
+    byPid.forEach((item) => {
+      const pid = item.place_id;
       if (!pid || detailCache[pid]) return;
 
       (async () => {
-        // 1) 신형 Place.fetchFields() → 값이 아니라 place 인스턴스를 채움
+        // 1-A) 신형 Place.fetchFields()
         if (Place) {
           try {
             const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-            await place.fetchFields({
-              fields: ['displayName','name','formattedAddress','regularOpeningHours','photos'],
-            });
-
-            const p = place.photos?.[0];
-            let photoUrl = '';
-            try {
-              if (p?.getURI)      photoUrl = p.getURI({ maxWidth: 400, maxHeight: 300 });
-              else if (p?.getUrl) photoUrl = p.getUrl({ maxWidth: 400, maxHeight: 300 });
-              else if (p?.getURL) photoUrl = p.getURL({ maxWidth: 400, maxHeight: 300 });
-            } catch {}
-
-            setDetailCache((prev) => ({
-              ...prev,
-              [pid]: {
-                title: place.displayName?.text || place.name || '',
-                address: place.formattedAddress || '',
-                openingHours: normalizeOpeningHours(place.regularOpeningHours || null),
-                photoUrl,
-              },
-            }));
-            return; // 성공 시 여기서 종료
-          } catch {}
-        }
-
-        // 2) 구형 getDetails 폴백
-        if (svc?.getDetails) {
-          return svc.getDetails(
-            { placeId: pid, fields: ['name','formatted_address','opening_hours','photos'] },
-            (det, st) => {
-              if (st !== window.google.maps.places.PlacesServiceStatus.OK || !det) return;
-              const p = det.photos?.[0];
-              let photoUrl = '';
+            const det   = await place.fetchFields({ fields: ['displayName','name','formattedAddress','regularOpeningHours','photos'] });
+            if (det) {
+              const ph = place.photos?.[0];
+              let url = '';
               try {
-                if (p?.getURI)      photoUrl = p.getURI({ maxWidth: 400, maxHeight: 300 });
-                else if (p?.getUrl) photoUrl = p.getUrl({ maxWidth: 400, maxHeight: 300 });
-                else if (p?.getURL) photoUrl = p.getURL({ maxWidth: 400, maxHeight: 300 });
+                if (ph?.getURI)      url = ph.getURI({ maxWidth: 400, maxHeight: 300 });
+                else if (ph?.getUrl) url = ph.getUrl({ maxWidth: 400, maxHeight: 300 });
+                else if (ph?.getURL) url = ph.getURL({ maxWidth: 400, maxHeight: 300 });
               } catch {}
               setDetailCache((prev) => ({
                 ...prev,
                 [pid]: {
-                  title: det.name || '',
-                  address: det.formatted_address || '',
-                  openingHours: normalizeOpeningHours(det.opening_hours || null),
-                  photoUrl,
+                  title: det?.displayName?.text || det?.name || item.main_text || '',
+                  address: det?.formattedAddress || item.secondary_text || '',
+                  openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
+                  photoUrl: url || '',
                 },
               }));
+              if (url) return; // 사진 얻었으면 끝
             }
-          );
+          } catch {}
         }
 
-        // 3) 서버(Places API New HTTP) 폴백
+        // 1-B) 서버 폴백
         try {
           const resp = await fetch(`/api/places/details?id=${encodeURIComponent(pid)}`);
           if (resp.ok) {
             const det = await resp.json();
+            let photoUrl = det?.photoUrl || '';
+            // 서버가 photoUrl을 아직 안 주는 환경 안전망: photos[0].name → 미디어 URL 직접 생성 (키는 프론트 .env)
+            if (!photoUrl && Array.isArray(det?.photos) && det.photos[0]?.name) {
+              const name = det.photos[0].name; // "places/.../photos/..."
+              const qs = new URLSearchParams({
+                maxWidth: '400',
+                maxHeight: '300',
+                key: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
+              });
+              photoUrl = `https://places.googleapis.com/v1/${encodeURIComponent(name)}/media?${qs.toString()}`;
+            }
             setDetailCache((prev) => ({
               ...prev,
               [pid]: {
-                title: det?.displayName?.text || det?.name || '',
-                address: det?.formattedAddress || '',
+                title: det?.displayName?.text || det?.name || item.main_text || '',
+                address: det?.formattedAddress || item.secondary_text || '',
                 openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
-                photoUrl: det?.photoUrl || '',
+                photoUrl: photoUrl || '',
               },
             }));
           }
         } catch {}
       })();
     });
-    // 의존성 경고를 피하려면 mapPreds, detailCache만 외부 의존
+
+    // 2) v1 전용 후보: 서버 디테일 → (사진 없으면) JS TextSearch로 place_id 역추적 → JS Place로 사진
+    byV1.forEach((item) => {
+      const v1id = item.id_v1;
+      if (!v1id || detailCache[v1id]) return;
+
+      (async () => {
+        // 2-A) 서버 디테일 먼저 시도 (주소/영업시간/이름 + 혹시 photoUrl 있으면 바로 사용)
+        try {
+          const resp = await fetch(`/api/places/details?id=${encodeURIComponent(v1id)}`);
+          if (resp.ok) {
+            const det = await resp.json();
+            const photoUrl = det?.photoUrl || '';
+            console.debug('[DETAIL v1]', v1id, det?.photos?.length, det?.photoUrl);
+            setDetailCache(prev => ({
+              ...prev,
+              [v1id]: {
+                title: det?.displayName?.text || det?.name || item.main_text || '',
+                address: det?.formattedAddress || item.secondary_text || '',
+                openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
+                photoUrl,
+              },
+            }));
+            if (photoUrl) return; // 서버가 사진까지 주면 종료
+          }
+        } catch {}
+
+        // 2-B) 서버가 사진을 못 줄 때: JS TextSearch로 place_id 역추적 후, JS Place에서 사진 가져오기
+        if (!svc || !Place) return;
+        const query = [item.main_text, item.secondary_text].filter(Boolean).join(' ');
+        svc.textSearch({ query, language: 'ko', region: 'KR' }, async (res, st) => {
+          if (st !== 'OK' || !Array.isArray(res) || !res.length) return;
+          const pid = res[0].place_id;
+          if (!pid) return;
+          try {
+            const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
+            await place.fetchFields({ fields: ['displayName','name','formattedAddress','regularOpeningHours','photos'] });
+            const ph = place.photos?.[0];
+            let url = '';
+            try {
+              if (ph?.getURI)      url = ph.getURI({ maxWidth: 400, maxHeight: 300 });
+              else if (ph?.getUrl) url = ph.getUrl({ maxWidth: 400, maxHeight: 300 });
+              else if (ph?.getURL) url = ph.getURL({ maxWidth: 400, maxHeight: 300 });
+            } catch {}
+            console.debug('[DETAIL pid->photo]', pid, url);
+            setDetailCache(prev => ({
+              ...prev,
+              [v1id]: {
+                title: place.displayName?.text || place.name || item.main_text || '',
+                address: place.formattedAddress || item.secondary_text || '',
+                openingHours: normalizeOpeningHours(place.regularOpeningHours || null),
+                photoUrl: url || '',
+              },
+            }));
+          } catch {}
+        });
+      })();
+    });
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapPreds]);
 
-  // 자동완성/텍스트/지오코더/HTTP 폴백으로 후보 가져오기 (이름 우선 정규화)
+  // 후보 검색(AC → 서버 v1 → TextSearch → Geocode 순)
   const fetchMapPreds = (q) => {
     setMapSearch(q);
     if (!q) { setMapPreds([]); return; }
@@ -186,34 +226,26 @@ export default function Recommend() {
 
     const show = (list) => setMapPreds((list || []).slice(0, 20));
 
-    // 1) Autocomplete (이름 우선: establishment 중심)
+    // 1) Autocomplete
     const doAutocomplete = () => new Promise((resolve) => {
       if (!ac) return resolve(false);
-      ac.getPlacePredictions(
-        {
-          input: q,
-          language: 'ko',
-          region: 'KR',
-          sessionToken: token,
-          types: ['establishment'], // 필요시 'tourist_attraction' 추가
-        },
-        (list, status) => {
-          if (status === 'OK' && Array.isArray(list) && list.length) {
-            const normalized = list.map((p) => ({
-              source: 'ac',
-              place_id: p.place_id,
-              main_text: p.structured_formatting?.main_text || '',
-              secondary_text: p.structured_formatting?.secondary_text || '',
-            }));
-            show(normalized);
-            return resolve(true);
-          }
-          resolve(false);
+      ac.getPlacePredictions({ input: q, language: 'ko', region: 'KR', sessionToken: token }, (list, status) => {
+        if (status === 'OK' && Array.isArray(list) && list.length) {
+          const normalized = list.map((p) => ({
+            source: 'ac',
+            place_id: p.place_id,
+            id_v1: null,
+            main_text: p.structured_formatting?.main_text || '',
+            secondary_text: p.structured_formatting?.secondary_text || '',
+          }));
+          show(normalized);
+          return resolve(true);
         }
-      );
+        resolve(false);
+      });
     });
 
-    // 2) 서버(Places API New) 폴백
+    // 2) 서버 v1 Search (id_v1를 받음)
     const doServerSearch = async () => {
       try {
         const resp = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`);
@@ -221,7 +253,8 @@ export default function Recommend() {
         const json = await resp.json();
         const preds = (json?.places || []).map((r) => ({
           source: 'server',
-          place_id: r.id || r.place_id || null,
+          place_id: r.placeId || r.place_id || null, // 있으면 채움
+          id_v1: r.id || null,                       // "places/XXXX"
           main_text: r.displayName?.text || r.name || '',
           secondary_text: r.formattedAddress || r.vicinity || '',
         }));
@@ -230,16 +263,17 @@ export default function Recommend() {
       } catch { return false; }
     };
 
-    // 3) TextSearch
+    // 3) JS TextSearch
     const doTextSearch = () => new Promise((resolve) => {
       if (!svc?.textSearch) return resolve(false);
       svc.textSearch({ query: q, language: 'ko', region: 'KR' }, (res, st) => {
         if (st === 'OK' && Array.isArray(res) && res.length) {
           const preds = res.map((r) => ({
-            source: 'ts',
-            place_id: r.place_id || r.id || null,
-            main_text: r.name || r.displayName?.text || '',
-            secondary_text: r.formatted_address || r.vicinity || r.formattedAddress || '',
+            source: 'js',
+            place_id: r.place_id || null,
+            id_v1: null,
+            main_text: r.name || '',
+            secondary_text: r.formatted_address || r.vicinity || '',
           }));
           show(preds);
           return resolve(true);
@@ -248,7 +282,7 @@ export default function Recommend() {
       });
     });
 
-    // 4) Geocoder (주소 라벨)
+    // 4) Geocode
     const doGeocode = () => new Promise((resolve) => {
       if (!gc) return resolve(false);
       gc.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
@@ -256,8 +290,9 @@ export default function Recommend() {
           const preds = res.map((r) => ({
             source: 'gc',
             place_id: r.place_id || null,
-            main_text: r.address_components?.[0]?.long_name || '주소',
-            secondary_text: r.formatted_address || '',
+            id_v1: null,
+            main_text: r.formatted_address || q,
+            secondary_text: '',
           }));
           show(preds);
           return resolve(true);
@@ -268,17 +303,18 @@ export default function Recommend() {
 
     (async () => {
       if (await doAutocomplete()) return;
-      if (await doServerSearch()) return;
+      if (await doServerSearch()) return;   // v1 결과 우선 수집(이후 역추적 폴백)
       if (await doTextSearch())  return;
       if (await doGeocode())     return;
       setMapPreds([]);
     })();
   };
 
-  // 후보 클릭 → 지도 중심 이동 + 핀
+  // 후보 클릭 시 지도 이동
   const panToPred = async (pred) => {
     const Place = window.google?.maps?.places?.Place;
     const pid = pred?.place_id;
+
     const pickLatLng = (loc) => {
       if (!loc) return null;
       if (typeof loc.lat === 'function' && typeof loc.lng === 'function') return { lat: +loc.lat(), lng: +loc.lng() };
@@ -287,11 +323,12 @@ export default function Recommend() {
       return null;
     };
 
+    // 1) JS Place
     if (Place && pid) {
       try {
-        const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-        await place.fetchFields({ fields: ['location'] });
-        const pt = pickLatLng(place?.location);
+        const det = await new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' })
+          .fetchFields({ fields: ['location'] });
+        const pt = pickLatLng(det?.location);
         if (pt) {
           setMapCenter(pt); setMapZoom(15);
           mapRef.current?.panTo(pt);
@@ -301,9 +338,11 @@ export default function Recommend() {
       } catch {}
     }
 
-    if (pid) {
+    // 2) 서버 디테일 폴백 (pid 또는 v1id)
+    const idForServer = pred?.id_v1 || pred?.place_id;
+    if (idForServer) {
       try {
-        const r = await fetch(`/api/places/details?id=${encodeURIComponent(pid)}`);
+        const r = await fetch(`/api/places/details?id=${encodeURIComponent(idForServer)}`);
         if (r.ok) {
           const det = await r.json();
           const pt = det?.location ? { lat: +det.location.latitude, lng: +det.location.longitude } : null;
@@ -317,77 +356,71 @@ export default function Recommend() {
       } catch {}
     }
 
+    // 3) Geocode 최후 수단
     const q = pred?.main_text;
     geocoderRef.current?.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
-      if (st === 'OK' && res?.[0]) {
-        const loc = res[0].geometry?.location;
-        if (loc) {
-          const pt = { lat: loc.lat(), lng: loc.lng() };
-          setMapCenter(pt); setMapZoom(15);
-          mapRef.current?.panTo(pt);
-          setTempPin(pt);
-        }
+      if (st === 'OK' && res?.[0]?.geometry?.location) {
+        const loc = res[0].geometry.location;
+        const pt = { lat: +loc.lat(), lng: +loc.lng() };
+        setMapCenter(pt); setMapZoom(15);
+        mapRef.current?.panTo(pt);
+        setTempPin(pt);
       }
     });
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto px-4 md:px-6 py-6">
-      <h2 className="text-xl md:text-2xl font-bold text-green-700 mb-4">관광지 검색</h2>
+    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+      {/* 검색 */}
+      <div className="mb-4">
+        <div className="text-xs mb-1">관광지/장소 검색</div>
+        <input
+          value={mapSearch}
+          onChange={(e) => fetchMapPreds(e.target.value)}
+          onFocus={() => { /* 오버레이 열기 용도 */ }}
+          placeholder="예: 오사카 성, 도톤보리, 광안리 해수욕장…"
+          className="w-full border rounded-lg px-3 py-2 text-sm"
+        />
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 md:gap-6">
-        {/* 왼쪽: 지도 */}
-        <div className="rounded-xl overflow-hidden border min-h-[65vh]">
-          {isLoaded ? (
-            <GoogleMap
-              onLoad={onMapLoad}
-              onUnmount={onMapUnmount}
-              mapContainerStyle={{ width: '100%', height: '100%' }}
-              center={mapCenter}
-              zoom={mapZoom}
-              options={{
-                fullscreenControl: false,
-                streetViewControl: false,
-                mapTypeControl: false,
-                zoomControl: true,
-                gestureHandling: 'greedy',
-              }}
-            >
-              {tempPin && <Marker position={{ lat: tempPin.lat, lng: tempPin.lng }} />}
-            </GoogleMap>
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">구글맵 로드 중…</div>
-          )}
+      {/* 2/3 지도 + 1/3 후보 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-2">
+          <div className="rounded-xl overflow-hidden border h-[520px]">
+            {isLoaded ? (
+              <GoogleMap
+                onLoad={onMapLoad}
+                onUnmount={() => { mapRef.current = null; }}
+                mapContainerStyle={{ width: '100%', height: '100%' }}
+                center={mapCenter}
+                zoom={mapZoom}
+                options={{ fullscreenControl:false, streetViewControl:false, mapTypeControl:false, zoomControl:true, gestureHandling:'greedy' }}
+              >
+                <Marker position={tempPin || mapCenter} />
+              </GoogleMap>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">구글맵 로드 중…</div>
+            )}
+          </div>
         </div>
 
-        {/* 오른쪽: 검색/후보 */}
-        <aside className="md:sticky md:top-4 h-auto md:max-h-[65vh] md:overflow-auto">
-          <div className="mb-3">
-            <label className="text-xs text-zinc-600 mb-1 block">지도에서 장소 찾기</label>
-            <input
-              value={mapSearch}
-              onChange={(e) => fetchMapPreds(e.target.value)}
-              placeholder="장소명을 입력하세요 (예: 도고온천, 디즈니랜드)"
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-            />
-            <p className="mt-2 text-[11px] text-zinc-500">
-              아래 후보를 클릭하면 왼쪽 지도에서 위치를 바로 확인할 수 있어요.
-            </p>
-          </div>
-
+        {/* 후보 패널 */}
+        <aside className="md:col-span-1">
+          <div className="text-sm font-medium mb-2">검색 결과</div>
           <div className="space-y-2">
             {mapPreds.length === 0 && (
               <div className="text-sm text-zinc-500 border rounded-lg p-3">검색어를 입력해보세요.</div>
             )}
 
             {mapPreds.map((p) => {
-              const det = detailCache[p.place_id] || {};
+              // ✅ 캐시 키 우선순위: v1 id → place_id
+              const det = detailCache[p.id_v1] || detailCache[p.place_id] || {};
               const placeName = det.title || p.main_text || '이름 없음';
               const placeAddress = det.address || p.secondary_text || '';
 
               return (
                 <button
-                  key={p.place_id || placeName}
+                  key={`${p.id_v1 || ''}_${p.place_id || ''}_${p.main_text}_${p.secondary_text}`}
                   onClick={() => panToPred(p)}
                   className="w-full text-left border rounded-xl bg-white p-3 hover:bg-zinc-50 transition"
                 >
