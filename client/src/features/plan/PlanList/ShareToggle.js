@@ -1,4 +1,4 @@
-// client\src\features\plan\components\ShareToggle.js
+//client\src\features\plan\PlanList\ShareToggle.js
 import React, { useEffect, useState } from 'react';
 import axios from '../../../api/axiosInstance';
 

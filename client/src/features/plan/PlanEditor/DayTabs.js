@@ -1,4 +1,4 @@
-// src/features/plan/pages/PlanEditor/DayTabs.js
+// src/features/plan/PlanEditor/DayTabs.js
 import React from 'react';
 
 export default function DayTabs({ days, activeIdx, onSelect }) {

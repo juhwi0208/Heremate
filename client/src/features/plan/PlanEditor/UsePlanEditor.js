@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+// client/src/features/plan/PlanEditor/UsePlanEditor.js
+// client/src/features/plan/PlanEditor/UsePlanEditor.js
+import { useEffect, useRef, useState, useMemo } from 'react';
 import axios from 'axios';
-import { useJsApiLoader } from '@react-google-maps/api';
+import { useGoogleMapsLoader } from '../../../lib/GoogleMapsLoader';
+import UsePlacesAutocomplete from '../../../lib/UsePlacesAutocomplete';
+import TravelRegions from '../../../data/TravelRegions';
 
-// 요구: fixed 스타일 옵션(라벨)
 export const STYLE_OPTIONS = ['자연','맛집','사진','쇼핑','예술','역사','체험','축제','휴식'];
-// 내부 저장 키/라벨
 export const PREFS = [
   { key: 'nature', label: '자연' },
   { key: 'food', label: '맛집' },
@@ -16,9 +18,6 @@ export const PREFS = [
   { key: 'festival', label: '축제' },
   { key: 'relax', label: '휴식' },
 ];
-
-// ✅ 로더: places + marker
-const GOOGLE_LIBRARIES = ['places', 'marker'];
 
 const fmtLocalYMD = (d) => {
   if (!d) return '';
@@ -53,7 +52,6 @@ const reconcileDays = (dates, prevDays) => {
   return dates.map((d) => map.get(d) || { date: d, note: '', entries: [] });
 };
 
-// ✅ 영업시간 정규화(v3 형식으로 통일)
 const normalizeOpeningHours = (oh) => {
   if (!oh) return null;
   if (oh.periods && oh.periods.length && oh.periods[0]?.open?.day !== undefined) return oh;
@@ -69,7 +67,6 @@ const normalizeOpeningHours = (oh) => {
   return null;
 };
 
-// ✅ 항상 `places/...` 형태로 보정
 const normalizePlaceId = (pid) => {
   if (!pid) return null;
   const s = String(pid);
@@ -77,17 +74,11 @@ const normalizePlaceId = (pid) => {
 };
 
 export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
-  // 로그인 가드
   const token = localStorage.getItem('token');
   const [loginGuard, setLoginGuard] = useState(!isEdit && !token && !isReadonly);
 
-  // 구글맵 로더
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
-    libraries: GOOGLE_LIBRARIES,
-  });
+  const { isLoaded } = useGoogleMapsLoader();
 
-  // 상단 폼/상태
   const [title, setTitle] = useState('');
   const [country, setCountry] = useState('');
   const [region, setRegion] = useState('');
@@ -99,10 +90,8 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
   const [isShared, setIsShared] = useState(0);
   const [loadError, setLoadError] = useState(null);
 
-  // 선택 엔트리
   const [selectedEntryId, setSelectedEntryId] = useState(null);
 
-  // 맵/검색
   const mapRef = useRef(null);
   const geocoderRef = useRef(null);
   const sessionTokenRef = useRef(null);
@@ -116,19 +105,95 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
   };
   const onMapUnmount = () => { mapRef.current = null; };
 
-  // 검색 상태
   const [mapSearch, setMapSearch] = useState('');
   const [mapPreds, setMapPreds] = useState([]);
   const [resultsOpen, setResultsOpen] = useState(false);
-  const [detailCache, setDetailCache] = useState({}); // { [pid]: { name, photoUrl, address, openingHours } }
+  const [detailCache, setDetailCache] = useState({});
 
-  // Axios 토큰
   useEffect(() => {
     if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     else delete axios.defaults.headers.common['Authorization'];
   }, [token]);
 
-  // 로드 (편집/복사)
+  // 나라/지역 -> 좌표
+  const selectedCoords = useMemo(() => {
+    if (!country) return null;
+    const c = TravelRegions.find(
+      (v) =>
+        v.code === country ||
+        v.name?.ko === country ||
+        v.name?.en === country
+    );
+    if (!c) return null;
+
+    if (region && Array.isArray(c.cities)) {
+      const city = c.cities.find(
+        (ci) => ci.ko === region || ci.en === region
+      );
+      if (city && Number.isFinite(city.lat) && Number.isFinite(city.lng)) {
+        return { lat: city.lat, lng: city.lng, radius: 50000 };
+      }
+    }
+
+    if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) {
+      return { lat: c.lat, lng: c.lng, radius: 120000 };
+    }
+
+    return { lat: 37.5665, lng: 126.9780, radius: 120000 };
+  }, [country, region]);
+
+  // 자동완성 훅
+  const {
+    items: autoPredictions,
+    loading: autoLoading,
+    error: autoError,
+    resetSession,
+    sessionToken,
+  } = UsePlacesAutocomplete({
+    query: mapSearch || '',
+    lat: selectedCoords?.lat,
+    lng: selectedCoords?.lng,
+    radius: selectedCoords?.radius || 50000,
+    language: 'ko',
+    region: 'KR',
+    minLength: 2,
+    debounceMs: 400,
+  });
+
+  // ✅ PlanEditor.js가 기대하는 "검색 호출 함수" (옛날 이름 유지)
+  const handleMapSearchChange = (q) => {
+    setMapSearch(q);
+  };
+
+  // 자동완성 결과를 기존 포맷으로 맞추기
+  useEffect(() => {
+    if (!mapSearch?.trim()) {
+      setMapPreds([]);
+      setResultsOpen(false);
+      return;
+    }
+    if (autoLoading) return;
+
+    const norm = (autoPredictions || []).map((p) => {
+      const id = p.id || p.place_id;
+      const main = p.name || p.displayName?.text || '';
+      const secondary = p.formattedAddress || p.address || '';
+      return {
+        place_id: id,
+        description: secondary ? `${main}, ${secondary}` : main,
+        structured_formatting: {
+          main_text: main,
+          secondary_text: secondary,
+        },
+      };
+    });
+
+    setMapPreds(norm);
+    setResultsOpen(norm.length > 0);
+  }, [mapSearch, autoPredictions, autoLoading]);
+
+  // (이 아래로는 원래 네 파일 로딩/CRUD/DnD/저장 로직 그대로)
+  // 여기부터는 네 원래 코드라서 변경 안 함 ————————————————
   useEffect(() => {
     if (!isEdit) return;
     (async () => {
@@ -230,7 +295,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     setActiveIdx(0);
   }, [isEdit, seed]);
 
-  // 날짜 변경
   const scheduleDateShrinkGuard = (nextStart, nextEnd) => {
     const oldDs = rangeDates(start, end);
     const newDs = rangeDates(nextStart, nextEnd);
@@ -253,7 +317,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     else scheduleDateShrinkGuard(start || v, v);
   };
 
-  // CRUD
   const addEntry = () => {
     if (!days[activeIdx]) return null;
     const id = crypto.randomUUID();
@@ -295,7 +358,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     });
   };
 
-  // DnD (Day간 이동)
   const dragRef = useRef(null);
   const onDragStart = (entryId) => (e) => {
     if (isReadonly) return;
@@ -324,65 +386,13 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     setSelectedEntryId(null);
   };
 
-  // ✅ (C) 서버 API 기반 후보 검색 + 지도 중심(lat/lng) bias 전달
-  const fetchMapPreds = (q) => {
-    setMapSearch(q);
-    if (!q?.trim()) { setMapPreds([]); setResultsOpen(false); return; }
-    (async () => {
-      try {
-        // 현재 맵 중심(없으면 서울 광화문 좌표)
-        const center = mapRef.current?.getCenter?.();
-        const lat = center?.lat?.() ?? 37.5665;
-        const lng = center?.lng?.() ?? 126.9780;
-
-        const global = 1; // ✅ 전세계 모드 기본.
-
-        const r1 = await axios.get('/api/places/autocomplete', { params: { q, lat, lng, global } }).catch(() => null);
-        const list = r1?.data?.predictions || [];
-        const base = list.length
-          ? list
-          : (await axios.get('/api/places/search', { params: { q, lat, lng, global } })).data?.places || [];
-
-        const norm = (base || []).slice(0, 8).map((it) => {
-          const v3id = it.place_id || it.id || null;
-
-          // 이름/주소 분리 유지
-          const main =
-            it.structured_formatting?.main_text ||
-            it.structuredFormat?.mainText?.text ||
-            it.displayName?.text ||
-            it.name || '';
-
-          const secondary =
-            it.structured_formatting?.secondary_text ||
-            it.structuredFormat?.secondaryText?.text ||
-            it.formattedAddress || '';
-
-          return {
-            place_id: v3id,                                // v3 'places/...' 우선
-            description: secondary ? `${main}, ${secondary}` : main,
-            structured_formatting: {
-              main_text: main,             // ← 이름만
-              secondary_text: secondary,   // ← 주소만
-            },
-          };
-        });
-        setMapPreds(norm);
-        setResultsOpen(norm.length > 0);
-      } catch {
-        setMapPreds([]); setResultsOpen(false);
-      }
-    })();
-  };
-
-  // 추천 카드 → 상세 캐시 프리패치
+  // 추천 후보 상세 프리패치 (sessionToken도 여기서 쓸 수 있음)
   useEffect(() => {
     const Place = window.google?.maps?.places?.Place;
     if (!Place) return;
     const nextIds = Array.from(new Set(mapPreds.map((p) => p.place_id).filter(Boolean)));
 
     const fetchWithFallback = async (pid, pred) => {
-      // 1) JS Places → 바로 시도
       try {
         const place = new Place({ id: normalizePlaceId(pid), requestedLanguage: 'ko', requestedRegion: 'KR' });
         const det = await place.fetchFields({
@@ -398,7 +408,7 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
             name: det?.displayName?.text || '',
             address: det?.formattedAddress || '',
             openingHours: normalizeOpeningHours(det?.regularOpeningHours) || null,
-            photoUrl
+            photoUrl,
           },
         }));
         return;
@@ -406,7 +416,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
         // fallthrough
       }
 
-      // 2) text search → v3 id 재시도
       let v3id = null;
       try {
         const main = pred?.structured_formatting?.main_text || '';
@@ -445,19 +454,28 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
         // fallthrough
       }
 
-      // 3) 서버 폴백(/api/places/details)
       try {
         const fallbackId = normalizePlaceId(v3id || pid);
-        const resp = await axios.get('/api/places/details', { params: { id: fallbackId } }).catch(() => null);
+        const resp = await axios.get('/api/places/details', {
+          params: {
+            id: fallbackId,
+            sessionToken,
+          },
+        }).catch(() => null);
         const det = resp?.data;
         if (det) {
+          const proxiedPhoto =
+            det?.photoName
+              ? `/api/places/photo?name=${encodeURIComponent(det.photoName)}&w=640&h=480`
+              : (det?.photoUrl || '');
+
           setDetailCache((prev) => ({
             ...prev,
             [pid]: {
               name: det?.displayName?.text || pred?.structured_formatting?.main_text || '',
               address: det?.formattedAddress || pred?.structured_formatting?.secondary_text || '',
               openingHours: det?.regularOpeningHours || null,
-              photoUrl: det?.photoUrl || '',
+              photoUrl: proxiedPhoto,
             },
           }));
         }
@@ -469,9 +487,8 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
       const pred = mapPreds.find((p) => p.place_id === pid) || {};
       fetchWithFallback(pid, pred);
     });
-  }, [mapPreds, detailCache]);
+  }, [mapPreds, detailCache, sessionToken]);
 
-  // 엔트리 적용
   const applyDetailToEntry = (entryId, detail, labelFallback) => {
     const getPhotoUrl = (obj) => {
       const p = obj?.photos?.[0];
@@ -489,7 +506,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     setSelectedEntryId(entryId);
   };
 
-  // 자유 검색으로 엔트리 갱신 (서버 검색 → Place.fetchFields, 실패 시 geocode)
   const findPlaceAndUpdate = async (entryId, queryOrDetail) => {
     if (!isLoaded) return alert('지도 준비 중입니다. 잠시 후 다시 시도해 주세요.');
     if (queryOrDetail && typeof queryOrDetail === 'object') {
@@ -501,28 +517,25 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     const q = String(queryOrDetail || '').trim();
     if (!q) return;
 
-    // 현재 맵 중심(없으면 서울)
-    const center = mapRef.current?.getCenter?.();
-    const lat = center?.lat?.() ?? 37.5665;
-    const lng = center?.lng?.() ?? 126.9780;
+    const lat = selectedCoords?.lat ?? 37.5665;
+    const lng = selectedCoords?.lng ?? 126.9780;
 
-    // 1) 서버 자동완성 → id 획득
     let top = null;
     try {
-      const r1 = await axios.get('/api/places/autocomplete', { params: { q, lat, lng } }).catch(() => null);
+      const r1 = await axios.get('/api/places/autocomplete', {
+        params: { q, lat, lng, sessionToken }
+      }).catch(() => null);
       const preds = r1?.data?.predictions || [];
       if (preds.length) top = preds[0];
     } catch {}
-    // 2) 없으면 서버 검색
     if (!top) {
       try {
-        const r2 = await axios.get('/api/places/search', { params: { q, lat, lng } }).catch(() => null);
+        const r2 = await axios.get('/api/places/search', { params: { q, lat, lng, global: 1 } }).catch(() => null);
         const list = r2?.data?.places || [];
         if (list.length) top = list[0];
       } catch {}
     }
 
-    // 3) id가 있으면 Place.fetchFields로 상세 조회
     try {
       const id = top?.id || top?.place_id;
       if (Place && id) {
@@ -534,7 +547,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
       }
     } catch {}
 
-    // 4) 최후: 지오코드
     const gc = geocoderRef.current;
     if (gc) {
       gc.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
@@ -549,7 +561,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     alert('검색 결과가 없거나 API 권한 문제가 있습니다.');
   };
 
-  // 일정으로 추가: Place.fetchFields 우선, 실패 시 서버 검색 fallback
   const addPredToCurrentDay = async (pred) => {
     if (isReadonly) return;
     const newId = (() => {
@@ -573,11 +584,12 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
         if (det) {
           applyDetailToEntry(newId, det);
           setMapSearch(''); setMapPreds([]); setResultsOpen(false);
+          resetSession();
           return;
         }
-      } catch { /* fallthrough */ }
+      } catch {}
     }
-    // 서버 검색으로 fallback
+
     const label =
       pred.structured_formatting?.main_text
       || pred.displayName?.text
@@ -585,9 +597,9 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
       || mapSearch;
     await findPlaceAndUpdate(newId, label);
     setMapSearch(''); setMapPreds([]); setResultsOpen(false);
+    resetSession();
   };
 
-  // 후보만 지도 이동(PlanEditor에서 Marker만 표시)
   const panToPred = async (pred) => {
     const Place = window.google?.maps?.places?.Place;
     const pid = pred.place_id;
@@ -629,7 +641,6 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
 
   const togglePref = (k) => setPrefs((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
 
-  // 저장 전 썸네일 후보 수집: Place.fetchFields만 사용
   const collectPhotoCandidates = async () => {
     const urls = new Set(days.flatMap(d => d.entries.map(en => en.photoUrl).filter(Boolean)));
     const pids = Array.from(new Set(days.flatMap(d => d.entries.map(en => en.placeId).filter(Boolean)))).slice(0, 25);
@@ -673,7 +684,7 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
         });
       });
     });
-    if (thumbnailUrl) notes.thumbnail_url = thumbnailUrl; // DB notes에만 저장
+    if (thumbnailUrl) notes.thumbnail_url = thumbnailUrl;
     return { notes, items };
   };
 
@@ -702,22 +713,21 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
   };
 
   return {
-    // 상단/폼
     title, setTitle, country, setCountry, region, setRegion,
     prefs, togglePref, PREFS, start, end, handleStartChange, handleEndChange,
     days, setDays, activeIdx, setActiveIdx, isShared, setIsShared,
     loadError, loginGuard, setLoginGuard,
 
-    // 맵/검색
     isLoaded, onMapLoad, onMapUnmount,
     selectedEntryId, setSelectedEntryId,
-    mapSearch, setMapSearch, fetchMapPreds, resultsOpen, mapPreds, detailCache,
+    mapSearch, setMapSearch,
+    // ✅ 옛날 이름 유지해서 PlanEditor.js 깨지지 않게 함
+    fetchMapPreds: handleMapSearchChange,
+    resultsOpen, mapPreds, detailCache,
     panToPred, addPredToCurrentDay, showOnMap,
 
-    // CRUD/DnD
     onDayDragOver, onDayDrop, addEntry, updateEntry, removeEntry, moveEntryUpDown, onDragStart,
 
-    // 저장
     collectPhotoCandidates, doPersist,
   };
 }

@@ -1,9 +1,9 @@
-// client/src/features/plan/pages/PlanList.js
+// client\src\features\plan\PlanList\PlanList.js
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from '../../../api/axiosInstance';
 import { useNavigate } from 'react-router-dom';
-import SharedPlanCard from '../components/SharedPlanCard';
-import PlanFilters from '../components/PlanFilters';
+import SharedPlanCard from './SharedPlanCard';
+import PlanFilters from './PlanFilters';
 import { Globe2, User, MapPin, Trash2 } from 'lucide-react';
 
 const diffDays = (s, e) => {

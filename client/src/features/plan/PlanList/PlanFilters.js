@@ -1,4 +1,6 @@
+//client\src\features\plan\PlanList\PlanFilters.js
 import React from 'react';
+import CountryCitySelect from '../../../components/CountryCitySelect';
 
 const ALL_PREFS = [
   { key: 'food', label: '맛집' },
@@ -42,25 +44,16 @@ export default function PlanFilters({
     <div className="bg-white rounded-2xl shadow p-3 border hover:shadow-md transition">
       {/* 한 줄 그리드: 나라, 지역, 시작월, 끝월, 취향(가로 스크롤), 초기화 */}
       <div className="grid grid-cols-12 gap-2 items-center">
-        {/* 나라 */}
-        <div className="col-span-2">
-          <label className="block text-xs text-zinc-600 mb-1">나라</label>
-          <input
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            placeholder="예: 한국, 일본"
-            className="w-full border rounded-xl px-2 h-8 text-xs focus:ring-2 focus:ring-green-600 outline-none"
-          />
-        </div>
-
-        {/* 지역 */}
-        <div className="col-span-2">
-          <label className="block text-xs text-zinc-600 mb-1">지역</label>
-          <input
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            placeholder="예: 서울, 부산, 마쓰야마"
-            className="w-full border rounded-xl px-2 h-8 text-xs focus:ring-2 focus:ring-green-600 outline-none"
+        {/* 나라 / 지역 (2단 드롭다운) */}
+        <div className="col-span-4">
+          <label className="block text-xs text-zinc-600 mb-1">여행 지역</label>
+          <CountryCitySelect
+            value={country && region ? { countryName: country, cityName: region } : null}
+            onChange={(val) => {
+              setCountry(val?.countryName || '');
+              setRegion(val?.cityName || '');
+            }}
+            compact
           />
         </div>
 

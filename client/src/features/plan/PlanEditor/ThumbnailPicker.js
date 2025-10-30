@@ -1,3 +1,4 @@
+//client\src\features\plan\PlanEditor\ThumbnailPicker.js
 import React from 'react';
 
 export default function ThumbnailPicker({ open, images, onClose, onShuffle, onSelect, onSkip }) {

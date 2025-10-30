@@ -57,6 +57,7 @@ app.use(morgan(NODE_ENV === 'production' ? 'tiny' : 'dev'));
 const allowlist = new Set(
   [
     'http://localhost:3000',
+    'http://127.0.0.1:3000',
     process.env.CLIENT_ORIGIN,
     ...(process.env.ALLOWED_ORIGINS || '')
       .split(',')

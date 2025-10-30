@@ -1,14 +1,13 @@
 // client/src/features/recommend/Recommend.js
-// Recommend 후보 썸네일 안정화: 
-//  - v1 전용 후보는 서버 디테일 → (사진 없으면) JS TextSearch로 place_id 역추적 후 사진 확보
+// Recommend 후보 썸네일 안정화 (기능/UI 동일 유지)
+//  - v1 전용 후보: 서버 디테일 → (사진 없으면) JS TextSearch로 place_id 역추적
 //  - 렌더링 캐시 키 우선순위: id_v1 → place_id
-//  - 사진 추출은 getURI → getUrl → getURL 순으로 시도
-//  - 디버그 로그 추가
+//  - 사진 추출: getURI → getUrl → getURL 순
 
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 
-const GOOGLE_LIBRARIES = ['places'];
+const GOOGLE_LIBRARIES = ['places', 'marker'];
 
 function normalizeOpeningHours(src) {
   if (!src) return null;
@@ -57,6 +56,7 @@ export default function Recommend() {
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
     libraries: GOOGLE_LIBRARIES,
     version: 'weekly',
+    // language/region은 각 호출에서 'ko'/'KR'로 지정
   });
 
   const mapRef = useRef(null);
@@ -82,7 +82,7 @@ export default function Recommend() {
     }
   };
 
-  // 후보가 바뀌면 상세(특히 사진)를 채움
+  // 후보 바뀌면 상세(특히 사진) 채우기
   useEffect(() => {
     const svc   = placesSvcRef.current;
     const Place = window.google?.maps?.places?.Place;
@@ -129,7 +129,7 @@ export default function Recommend() {
           if (resp.ok) {
             const det = await resp.json();
             let photoUrl = det?.photoUrl || '';
-            // 서버가 photoUrl을 아직 안 주는 환경 안전망: photos[0].name → 미디어 URL 직접 생성 (키는 프론트 .env)
+            // 서버 안전망: photos[0].name → v1 미디어 URL 직접 생성(프론트 키 사용)
             if (!photoUrl && Array.isArray(det?.photos) && det.photos[0]?.name) {
               const name = det.photos[0].name; // "places/.../photos/..."
               const qs = new URLSearchParams({
@@ -153,19 +153,18 @@ export default function Recommend() {
       })();
     });
 
-    // 2) v1 전용 후보: 서버 디테일 → (사진 없으면) JS TextSearch로 place_id 역추적 → JS Place로 사진
+    // 2) v1 전용 후보: 서버 디테일 → (사진 없으면) JS TextSearch로 place_id 역추적
     byV1.forEach((item) => {
       const v1id = item.id_v1;
       if (!v1id || detailCache[v1id]) return;
 
       (async () => {
-        // 2-A) 서버 디테일 먼저 시도 (주소/영업시간/이름 + 혹시 photoUrl 있으면 바로 사용)
+        // 2-A) 서버 디테일 먼저
         try {
           const resp = await fetch(`/api/places/details?id=${encodeURIComponent(v1id)}`);
           if (resp.ok) {
             const det = await resp.json();
             const photoUrl = det?.photoUrl || '';
-            console.debug('[DETAIL v1]', v1id, det?.photos?.length, det?.photoUrl);
             setDetailCache(prev => ({
               ...prev,
               [v1id]: {
@@ -179,7 +178,8 @@ export default function Recommend() {
           }
         } catch {}
 
-        // 2-B) 서버가 사진을 못 줄 때: JS TextSearch로 place_id 역추적 후, JS Place에서 사진 가져오기
+        // 2-B) 서버가 사진 못 줄 때: JS TextSearch → JS Place 사진
+        const svc = placesSvcRef.current;
         if (!svc || !Place) return;
         const query = [item.main_text, item.secondary_text].filter(Boolean).join(' ');
         svc.textSearch({ query, language: 'ko', region: 'KR' }, async (res, st) => {
@@ -196,7 +196,6 @@ export default function Recommend() {
               else if (ph?.getUrl) url = ph.getUrl({ maxWidth: 400, maxHeight: 300 });
               else if (ph?.getURL) url = ph.getURL({ maxWidth: 400, maxHeight: 300 });
             } catch {}
-            console.debug('[DETAIL pid->photo]', pid, url);
             setDetailCache(prev => ({
               ...prev,
               [v1id]: {
@@ -253,7 +252,7 @@ export default function Recommend() {
         const json = await resp.json();
         const preds = (json?.places || []).map((r) => ({
           source: 'server',
-          place_id: r.placeId || r.place_id || null, // 있으면 채움
+          place_id: r.placeId || r.place_id || null, // 있으면 사용
           id_v1: r.id || null,                       // "places/XXXX"
           main_text: r.displayName?.text || r.name || '',
           secondary_text: r.formattedAddress || r.vicinity || '',

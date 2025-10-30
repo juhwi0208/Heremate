@@ -1,13 +1,14 @@
-// src/features/plan/pages/PlanEditor/PlanEditor.js
+// src/features/plan/PlanEditor/PlanEditor.js
 import React, { useMemo, useState } from 'react';
 import { GoogleMap, Marker } from '@react-google-maps/api';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import ShareToggle from '../../components/ShareToggle';
+import ShareToggle from '../PlanList/ShareToggle';
 import DayTabs from './DayTabs';
 import DayCard from './DayCard';
 import ThumbnailPicker from './ThumbnailPicker';
 import LoginRequiredModal from './LoginRequiredModal';
-import usePlanEditor from './usePlanEditor';
+import usePlanEditor from './UsePlanEditor';
+import CountryCitySelect from '../../../components/CountryCitySelect';
 
 export default function PlanEditor() {
   const navigate = useNavigate();
@@ -99,13 +100,17 @@ export default function PlanEditor() {
             <div className="text-xs text-zinc-500 mb-1">여행 제목</div>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: 도쿄 벚꽃 여행" className="w-full border rounded-lg px-3 py-2 text-sm" />
           </div>
-          <div className="md:col-span-2">
-            <div className="text-xs text-zinc-500 mb-1">국가</div>
-            <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="예: 일본" className="w-full border rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div className="md:col-span-2">
-            <div className="text-xs text-zinc-500 mb-1">지역</div>
-            <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="예: 도쿄" className="w-full border rounded-lg px-3 py-2 text-sm" />
+          <div className="md:col-span-4">
+            <div className="text-xs text-zinc-500 mb-1">여행 지역</div>
+            <CountryCitySelect
+              country={country}               // ✅ 값 바인딩
+              region={region}                 // ✅ 값 바인딩
+              onChangeCountry={(c) => {       // ✅ 변경 이벤트 연결
+                setCountry(c);
+                setRegion('');                // 나라 바뀌면 지역 초기화(기존 UX 유지)
+              }}
+              onChangeRegion={(r) => setRegion(r)}  // ✅ 지역 변경
+            />
           </div>
           <div className="md:col-span-1">
             <div className="text-xs text-zinc-500 mb-1">시작일</div>
@@ -254,7 +259,7 @@ export default function PlanEditor() {
         open={thumbOpen}
         images={thumbSix}
         onClose={() => setThumbOpen(false)}
-        onShuffle={() => setThumbSix(pickRandom(thumbPool, Math.min(6, thumbPool.length)))}
+        onShuffle={handleShuffleThumbs}
         onSelect={(url) => onSelectThumbAndSave(url)}
         onSkip={() => onSelectThumbAndSave(null)}
       />

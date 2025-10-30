@@ -1,165 +1,302 @@
 // server/routes/places.js
 const express = require('express');
-const axios = require('axios');
 const router = express.Router();
+const axios = require('axios');
+const API_KEY = process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.GCP_API_KEY;
 
-const API_KEY = process.env.GCP_API_KEY;
-
-// 공통 헤더
-const headers = (fieldMask) => ({
-  'X-Goog-Api-Key': API_KEY,
-  'X-Goog-FieldMask': fieldMask,
-});
-
-// 🔹 전역/바이어스 구성
-function buildLocationBias({ lat, lng, radius, global }) {
-  if (global) return undefined; // 전세계 검색
-  const r = Math.max(1000, Math.min(Number(radius) || 500000, 1000000)); // 1km~1000km
-  return {
-    circle: {
-      center: { latitude: Number(lat) || 37.5665, longitude: Number(lng) || 126.9780 },
-      radius: r,
-    },
-  };
+if (!API_KEY) {
+  console.warn('[places] WARNING: GOOGLE_MAPS_API_KEY (or GCP_API_KEY) not set.');
 }
 
-// ✅ 자동완성
-// GET /api/places/autocomplete?q=...&lat=..&lng=..&radius=..&global=1
+// 공통 POST JSON 유틸
+async function postJSON(url, body, fieldMask) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-Goog-Api-Key': API_KEY,
+      ...(fieldMask ? { 'X-Goog-FieldMask': fieldMask } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = json?.error?.message || json?.message || r.statusText;
+    const code = json?.error?.code || r.status;
+    const err = new Error(`[Places] ${code} ${msg}`);
+    err.code = code;
+    err.detail = json;
+    throw err;
+  }
+  return json;
+}
+
+// 항상 "places/XXXX" 포맷으로
+function normalizePlaceResourceId(idOrName) {
+  if (!idOrName) return null;
+  const s = String(idOrName);
+  return s.startsWith('places/') ? s : `places/${s}`;
+}
+
+/**
+ * GET /api/places/autocomplete?q=&lat=&lng=&radius=&global=
+ */
+// ✅ 자동완성 라우트 교체
 router.get('/autocomplete', async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
-    if (!q) return res.json({ predictions: [] });
+    const languageCode = String(req.query.lang || 'ko');
+    const regionCode = String(req.query.region || 'KR');
 
+    // 클라에서 넘겨준 지역 좌표 (도쿄/오사카/서울…)
     const lat = Number(req.query.lat || 37.5665);
     const lng = Number(req.query.lng || 126.9780);
-    const radius = Number(req.query.radius || 500000);
-    const global = String(req.query.global || '1') === '1';
+    const radius = Math.min(Number(req.query.radius || 50000), 150000);
 
+    // 세션 토큰(있으면 과금 묶임)
+    const sessionToken = String(req.query.sessionToken || '');
+
+    if (!q) {
+      return res.json({ predictions: [] });
+    }
+    if (!API_KEY) {
+      return res.status(500).json({ error: 'GOOGLE_PLACES_API_KEY not set' });
+    }
+
+    // 구글에 보낼 바디
     const body = {
       input: q,
-      languageCode: 'ko',
-      regionCode: 'KR',
+      languageCode,
+      regionCode,
+      locationBias: {
+        circle: {
+          center: { latitude: lat, longitude: lng },
+          radius: radius,
+        },
+      },
     };
-    const bias = buildLocationBias({ lat, lng, radius, global });
-    if (bias) body.locationBias = bias;
 
-    const fieldMask = [
-      'suggestions.placePrediction.placeId',
-      'suggestions.placePrediction.text',
-      'suggestions.placePrediction.structuredFormat',
-    ].join(',');
+    if (sessionToken) {
+      body.sessionToken = sessionToken;
+    }
 
-    const { data } = await axios.post(
+    // ✅ axios로 직접 호출 (여기가 포인트)
+    const gRes = await axios.post(
       'https://places.googleapis.com/v1/places:autocomplete',
       body,
-      { headers: headers(fieldMask) }
+      {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'X-Goog-Api-Key': API_KEY,
+          // ❗ v1은 이 헤더에 정확한 문자열이 들어가야 함
+          'X-Goog-FieldMask':
+            'suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat',
+        },
+        // 혹시 프록시나 인증 이슈 있을 때 타임아웃 짧게
+        timeout: 6000,
+      }
     );
 
-    // v3 응답을 클라에서 쓰기 쉬운 형태로 변환
-    const predictions = (data?.suggestions || []).map((s) => {
-      const p = s.placePrediction || {};
-      // v3는 placeId가 이미 'places/...' 리소스 이름
-      const id = p.placeId || null;
-      const main = p.structuredFormat?.mainText?.text || p.text?.text || '';
-      const secondary = p.structuredFormat?.secondaryText?.text || '';
+    const suggestions = Array.isArray(gRes.data?.suggestions)
+      ? gRes.data.suggestions
+      : [];
+
+    // 도쿄 디즈니랜드 같은 걸 앞쪽으로
+    const qLower = q.toLowerCase();
+    suggestions.sort((a, b) => {
+      const ta =
+        (a.placePrediction?.text?.text ||
+          a.placePrediction?.structuredFormat?.mainText?.text ||
+          '')?.toLowerCase() || '';
+      const tb =
+        (b.placePrediction?.text?.text ||
+          b.placePrediction?.structuredFormat?.mainText?.text ||
+          '')?.toLowerCase() || '';
+      const ia = ta.indexOf(qLower);
+      const ib = tb.indexOf(qLower);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+
+    const predictions = suggestions.map((s) => {
+      const pred = s.placePrediction || {};
+      const main =
+        pred.text?.text ||
+        pred.structuredFormat?.mainText?.text ||
+        '';
+      const secondary =
+        pred.structuredFormat?.secondaryText?.text || '';
       return {
-        place_id: id, // 그대로 사용 (places/…)
-        description: secondary ? `${main}, ${secondary}` : main,
-        structured_formatting: {
-          main_text: main,
-          secondary_text: secondary,
-        },
+        id: pred.placeId ? `places/${pred.placeId}` : null,
+        name: main,
+        formattedAddress: secondary,
       };
     });
 
-    res.json({ predictions });
-  } catch (e) {
-    console.error('[places:autocomplete]', e?.response?.status, e?.response?.data || e.message);
-    res.status(500).json({ error: 'places autocomplete failed' });
+    return res.json({ predictions });
+  } catch (err) {
+    console.error('[places:autocomplete] error →', err?.response?.status, err?.response?.data || err.message);
+
+    // 구글이 뭐라고 했는지 그대로 보여주면 디버깅 쉬움
+    return res.status(502).json({
+      error: 'places autocomplete failed',
+      upstreamStatus: err?.response?.status || null,
+      upstreamData: err?.response?.data || null,
+      message: err.message,
+    });
   }
 });
 
-// ✅ 텍스트 검색 (v3)
-// GET /api/places/search?q=...&lat=..&lng=..&radius=..&global=1
-router.get('/search', async (req, res) => {
-  const q = (req.query.q || '').toString().trim();
-  if (!q) return res.status(400).json({ error: 'q required' });
 
+
+/**
+ * GET /api/places/search?q=&lat=&lng=&radius=&global=
+ */
+router.get('/search', async (req, res) => {
   try {
+    const q = String(req.query.q || '').trim();
     const lat = Number(req.query.lat || 37.5665);
     const lng = Number(req.query.lng || 126.9780);
     const radius = Number(req.query.radius || 500000);
-    const global = String(req.query.global || '1') === '1';
+    const global = req.query.global !== '0';
+
+    if (!q) return res.json({ places: [] });
 
     const body = {
       textQuery: q,
       languageCode: 'ko',
       regionCode: 'KR',
     };
-    const bias = buildLocationBias({ lat, lng, radius, global });
-    if (bias) body.locationBias = bias;
 
-    const { data } = await axios.post(
+    if (!global) {
+      body.locationBias = {
+        circle: { center: { latitude: lat, longitude: lng }, radius },
+      };
+    }
+
+    const json = await postJSON(
       'https://places.googleapis.com/v1/places:searchText',
       body,
-      {
-        headers: headers(
-          [
-            'places.id',
-            'places.displayName',
-            'places.formattedAddress',
-            'places.location',
-            'places.regularOpeningHours',
-          ].join(',')
-        ),
-      }
+      'places.id,places.displayName,places.formattedAddress,places.location,places.regularOpeningHours,places.photos,places.googleMapsUri'
     );
 
-    res.json(data);
+    const places = (json.places || []).map((p) => ({
+      id: normalizePlaceResourceId(p?.id),
+      name: p?.displayName?.text || '',
+      formattedAddress: p?.formattedAddress || '',
+      location: p?.location || null,
+      regularOpeningHours: p?.regularOpeningHours || null,
+      photos: p?.photos || [],
+      googleMapsUri: p?.googleMapsUri || '',
+    }));
+
+    res.json({ places });
   } catch (e) {
-    console.error('[places:search]', e?.response?.status, e?.response?.data || e.message);
-    res.status(500).json({ error: 'places search failed' });
+    console.error('[places:search]', e.code, e.detail || e.message);
+    res
+      .status(502)
+      .json({ error: 'places search failed', code: e.code, detail: e.detail });
   }
 });
 
+/**
+ * GET /api/places/details?id=
+ */
 router.get('/details', async (req, res) => {
   try {
-    const id = String(req.query.id || '').trim();
+    const idRaw = String(req.query.id || '').trim();
+    const id = normalizePlaceResourceId(idRaw);
     if (!id) return res.status(400).json({ error: 'id required' });
 
-    // v3 place fetch
-    const fields = [
-      'id',
-      'displayName',
-      'formattedAddress',
-      'regularOpeningHours',
-      'photos'
-    ].join(',');
+    const fieldMask =
+      'id,displayName,formattedAddress,location,regularOpeningHours,photos,googleMapsUri';
 
-    const { data: place } = await axios.get(
-      `https://places.googleapis.com/v1/${encodeURIComponent(id)}`,
-      { headers: { 'X-Goog-Api-Key': API_KEY, 'X-Goog-FieldMask': fields } }
-    );
+    // ✅ encodeURIComponent 제거 (502 방지)
+    const url = `https://places.googleapis.com/v1/${id}?languageCode=ko&regionCode=KR`;
 
-    // 대표 사진 URL 만들기 (redirect 미디어 엔드포인트)
-    let photoUrl = '';
-    const ph = place?.photos?.[0];
-    if (ph?.name) {
-      // 예: places/XXXX/photos/YYY → media
-      photoUrl = `https://places.googleapis.com/v1/${encodeURIComponent(ph.name)}/media?maxWidthPx=640&key=${API_KEY}`;
+    const r = await fetch(url, {
+      headers: { 'X-Goog-Api-Key': API_KEY, 'X-Goog-FieldMask': fieldMask },
+    });
+
+    const data = await r.json().catch(() => ({}));
+
+    if (!r.ok) {
+      console.error('[places:details fail]', r.status, data?.error?.message);
+      const msg = data?.error?.message || r.statusText;
+      const code = data?.error?.code || r.status;
+      const err = new Error(`[Places] ${code} ${msg}`);
+      err.code = code;
+      err.detail = data;
+      throw err;
     }
 
+    // ✅ 사진 프록시 방식 적용
+    const photoName = data?.photos?.[0]?.name || '';
+    const photoUrl = photoName
+      ? `/api/places/photo?name=${encodeURIComponent(photoName)}&w=640&h=480`
+      : '';
+
     res.json({
-      id: place?.id || id,
-      displayName: place?.displayName,
-      formattedAddress: place?.formattedAddress || '',
-      regularOpeningHours: place?.regularOpeningHours || null,
-      photoUrl,
+      id: normalizePlaceResourceId(data?.id),
+      displayName: data?.displayName || null,
+      formattedAddress: data?.formattedAddress || '',
+      location: data?.location || null,
+      regularOpeningHours: data?.regularOpeningHours || null,
+      googleMapsUri: data?.googleMapsUri || '',
+      photoName,
+      photoUrl, // ✅ 클라이언트에서 바로 <img src=photoUrl /> 가능
     });
   } catch (e) {
-    console.error('[places:details]', e?.response?.status, e?.response?.data || e.message);
-    res.status(500).json({ error: 'places details failed' });
+    console.error('[places:details]', e.code, e.detail || e.message);
+    res
+      .status(502)
+      .json({ error: 'places details failed', code: e.code, detail: e.detail });
+  }
+});
+
+router.get('/photo', async (req, res) => {
+  try {
+    const rawName = req.query.name;
+    if (!rawName) return res.status(400).json({ error: 'name required' });
+
+    // ✅ URL 디코딩
+    const decoded = decodeURIComponent(rawName);
+    // ✅ "places/.../photos/..." 구조 유지 (placeId + photoId 포함)
+    const nameParts = decoded.split('/photos/');
+    if (nameParts.length !== 2)
+      return res.status(400).json({ error: 'invalid photo name format' });
+
+    const placeIdPart = nameParts[0]; // e.g. "places/ChIJxxxx"
+    const photoIdPart = nameParts[1]; // e.g. "AWn5SUxxxx"
+
+    const w = Number(req.query.w) || 640;
+    const h = Number(req.query.h) || 480;
+
+    // ✅ 올바른 Google API URL 생성
+    const url = `https://places.googleapis.com/v1/${placeIdPart}/photos/${photoIdPart}/media?maxWidthPx=${w}&maxHeightPx=${h}`;
+
+    const r = await fetch(url, {
+      headers: {
+        'X-Goog-Api-Key': API_KEY,
+      },
+    });
+
+    if (!r.ok) {
+      const txt = await r.text();
+      console.error('[places:photo]', r.status, txt);
+      return res.status(r.status).json({ error: 'fetch photo failed' });
+    }
+
+    const buf = await r.arrayBuffer();
+
+    // ✅ Content-Type / 캐시 / 응답 처리
+    res.setHeader('Content-Type', r.headers.get('content-type') || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(buf));
+  } catch (e) {
+    console.error('[places:photo error]', e.message);
+    res.status(500).json({ error: 'fetch photo failed' });
   }
 });
 
 module.exports = router;
+

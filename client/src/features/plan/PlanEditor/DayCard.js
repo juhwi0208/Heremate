@@ -1,4 +1,4 @@
-// src/features/plan/pages/PlanEditor/DayCard.js
+// src/features/plan/PlanEditor/DayCard.js
 import React, { useState } from 'react';
 
 const times30m = Array.from({ length: 48 }, (_, i) => {

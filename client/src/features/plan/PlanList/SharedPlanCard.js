@@ -1,4 +1,4 @@
-// client/src/features/plan/components/SharedPlanCard.js
+//client\src\features\plan\PlanList\SharedPlanCard.js
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, MapPin } from 'lucide-react';

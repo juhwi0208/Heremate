@@ -1,6 +1,7 @@
 // client/src/features/mate/MateForm.js
 import React, { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import CountryCitySelect, { countryCityToLocation } from '../../components/CountryCitySelect';
 import axios from '../../api/axiosInstance';
 
 // 여행 취향 옵션(칩)
@@ -14,7 +15,7 @@ export default function MateForm() {
   const [content, setContent] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [location, setLocation] = useState('');
+  const [region, setRegion] = useState(null);
   const [styles, setStyles] = useState([]); // 다중 선택(최대 3)
 
   // placeholder 유지 위해 focus 시 type을 date로 전환
@@ -25,8 +26,8 @@ export default function MateForm() {
   const CONTENT_MAX = 1000;
 
   const canSubmit = useMemo(() => {
-    return title.trim() && startDate && endDate && location.trim() && styles.length > 0;
-  }, [title, startDate, endDate, location, styles]);
+    return title.trim() && startDate && endDate && countryCityToLocation(region) && styles.length > 0;
+  }, [title, startDate, endDate, region, styles]);
 
   const toggleStyle = (v) => {
     setStyles((prev) => {
@@ -47,8 +48,7 @@ export default function MateForm() {
         content: content.trim(),
         start_date: startDate,
         end_date: endDate,
-        location: location.trim(),
-        // 서버는 단일 컬럼이면 콤마로 합쳐 전송
+        location: countryCityToLocation(region),
         travel_style: styles.join(','),
       });
       navigate('/mate');
@@ -185,16 +185,14 @@ export default function MateForm() {
             <label className="block text-[14px] font-semibold text-slate-700 mb-2">
               여행 지역 <span className="text-rose-500">*</span>
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="예: 제주도, 부산, 오사카, 방콕"
-                className="w-full rounded-lg border border-slate-300 pl-11 pr-4 py-3 text-[15px] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] select-none">📍</span>
-            </div>
+            <CountryCitySelect
+              value={region}
+              onChange={setRegion}
+              required
+            />
+            <p className="text-[12px] text-slate-500 mt-2">
+              나라를 먼저 선택한 뒤 도시를 선택하세요.
+            </p>
           </div>
 
           {/* 여행 취향(칩, 최대 3개) */}

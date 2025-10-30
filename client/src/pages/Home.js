@@ -6,8 +6,9 @@ const Home = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="bg-white min-h-screen">
-      {/* Hero Section */}
+    // ✅ 회색(white) → 초록(#F3FCEB)로 변경해 전체 배경을 채움
+    <div className="min-h-screen bg-[#F3FCEB]">
+      {/* Hero Section (초록) */}
       <section className="flex flex-col md:flex-row items-center justify-between px-6 md:px-20 py-16 bg-[#F3FCEB]">
         <div className="text-left mb-8 md:mb-0 md:w-1/2">
           <h1 className="text-3xl md:text-4xl font-bold mb-4">
@@ -34,11 +35,10 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 여행 메이트 게시글 */}
-      <section className="py-10 px-6 md:px-20">
+      {/* 여행 메이트 게시글 (흰색) */}
+      <section className="py-10 px-6 md:px-20 bg-white">
         <h2 className="text-2xl font-bold mb-8">여행 메이트 게시글</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* 이 부분은 추후 map(post => ...)으로 대체 */}
           <div className="p-4 rounded-xl bg-white shadow">오사카 여행 메이트 구합니다!</div>
           <div className="p-4 rounded-xl bg-[#DDF3D9] shadow">LA 디즈니 랜드 동행 구해요.</div>
           <div className="p-4 rounded-xl bg-white shadow">뉴욕 여행 같이 여행하실 분!</div>
@@ -46,12 +46,11 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 여행 계획 */}
+      {/* 여행 계획 (초록) */}
       <section className="bg-[#E2F6CB] py-16 px-6 md:px-20">
         <h2 className="text-2xl font-bold mb-8">여행 계획</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* 추후 map으로 대체 */}
-          <div className="border rounded-xl p-4">
+          <div className="border rounded-xl p-4 bg-white">
             <h3 className="text-lg font-semibold mb-2 text-[#009C89]">일본 오사카<br />25.01.23 ~ 25.01.28</h3>
             <ul className="text-sm text-gray-600">
               <li>⧠ 맛집 둘러보기</li>
@@ -60,7 +59,7 @@ const Home = () => {
               <li>⧠ 신세카이 관광</li>
             </ul>
           </div>
-          <div className="border rounded-xl p-4">
+          <div className="border rounded-xl p-4 bg-white">
             <h3 className="text-lg font-semibold mb-2 text-[#009C89]">캐나다 밴프<br />25.05.20 ~ 25.06.05</h3>
             <ul className="text-sm text-gray-600">
               <li>⧠ 레이크 루이스</li>
@@ -70,7 +69,7 @@ const Home = () => {
               <li>⧠ 보우폭포</li>
             </ul>
           </div>
-          <div className="border rounded-xl p-4">
+          <div className="border rounded-xl p-4 bg-white">
             <h3 className="text-lg font-semibold mb-2 text-[#009C89]">대만 타이베이<br />25.04.23 ~ 25.04.28</h3>
             <ul className="text-sm text-gray-600">
               <li>⧠ 타이베이 101 타워</li>
@@ -82,8 +81,8 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 여행 스토리 */}
-      <section className="py-16 px-6 md:px-20">
+      {/* 여행 스토리 (흰색) */}
+      <section className="py-16 px-6 md:px-20 bg-white">
         <h2 className="text-2xl font-bold mb-8">여행 스토리</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
@@ -100,8 +99,6 @@ const Home = () => {
           </div>
         </div>
       </section>
-
-      
     </div>
   );
 };

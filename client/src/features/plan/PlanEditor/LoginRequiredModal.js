@@ -1,3 +1,4 @@
+//client\src\features\plan\PlanEditor\LoginRequiredModal.js
 import React from 'react';
 
 export default function LoginRequiredModal({ open, onClose, onLogin, onSignup }) {

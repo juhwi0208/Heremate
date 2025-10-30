@@ -1,6 +1,7 @@
 // client/src/features/mate/MateList.js
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import CountryCitySelect, { countryCityToLocation } from '../../components/CountryCitySelect';
 import axios from '../../api/axiosInstance';
 
 const ALL_STYLES = ['자연','맛집','사진','쇼핑','예술','역사','체험','축제','휴식'];
@@ -50,7 +51,7 @@ export default function MateList() {
   const navigate = useNavigate();
 
   const [posts, setPosts] = useState([]);
-  const [location, setLocation] = useState('');
+  const [regionFilter, setRegionFilter] = useState(null);
   const [openStyle, setOpenStyle] = useState(false);
   const [styles, setStyles] = useState([]);
   const [sort, setSort] = useState('latest'); // latest | travel_date
@@ -58,7 +59,6 @@ export default function MateList() {
   const [endDate, setEndDate] = useState('');
 
   const styleParam = useMemo(() => (styles.length ? styles.join(',') : ''), [styles]);
-  const locationParam = location.trim();
 
   const styleRef = useRef(null);
   useEffect(() => {
@@ -74,8 +74,9 @@ export default function MateList() {
   };
 
   useEffect(() => {
+    const locationParam = countryCityToLocation(regionFilter);
     fetchList({ location: locationParam, style: styleParam, startDate, endDate });
-  }, [locationParam, styleParam, startDate, endDate]);
+  }, [regionFilter, styleParam, startDate, endDate]);
 
   const sortedPosts = useMemo(() => {
     const arr = [...posts];
@@ -120,12 +121,10 @@ export default function MateList() {
         <section className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] px-4 py-3 mb-10">
           <div className="flex flex-wrap items-center gap-3">
             <label className="text-[13px] text-slate-700">지역</label>
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="예: 제주, 부산…"
-              className="h-9 px-3 rounded-lg border border-slate-300 text-[13px] bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-600"
+            <CountryCitySelect
+              value={regionFilter}
+              onChange={setRegionFilter}
+              compact
             />
 
             <label className="ml-2 text-[13px] text-slate-700">시작</label>
