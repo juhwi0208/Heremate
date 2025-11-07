@@ -25,6 +25,11 @@ const axios = axiosBase.create({
   withCredentials: true,
 });
 
+ const bootToken = localStorage.getItem('token');
+ if (bootToken) {
+   axios.defaults.headers.common.Authorization = `Bearer ${bootToken}`;
+ }
+
 // -------- 요청 인터셉터: Bearer 자동 주입 --------
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');

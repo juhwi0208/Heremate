@@ -176,15 +176,27 @@ router.get('/search', async (req, res) => {
     const json = await postJSON(
       'https://places.googleapis.com/v1/places:searchText',
       body,
-      'places.id,places.displayName,places.formattedAddress,places.location,places.regularOpeningHours,places.photos,places.googleMapsUri'
-    );
+      [
+        'places.id',
+        'places.displayName',
+        'places.formattedAddress',
+        'places.location',
+        // 🟢 정규/현재 영업시간 모두 요청 (어느 쪽이든 오도록)
+        'places.regularOpeningHours.periods',
+        'places.regularOpeningHours.weekdayDescriptions',
+        'places.currentOpeningHours.periods',
+        'places.currentOpeningHours.weekdayDescriptions',
+        'places.photos',
+        'places.googleMapsUri',
+      ].join(',')
+    )
 
     const places = (json.places || []).map((p) => ({
       id: normalizePlaceResourceId(p?.id),
       name: p?.displayName?.text || '',
       formattedAddress: p?.formattedAddress || '',
       location: p?.location || null,
-      regularOpeningHours: p?.regularOpeningHours || null,
+      regularOpeningHours: p?.regularOpeningHours || p?.currentOpeningHours || null,
       photos: p?.photos || [],
       googleMapsUri: p?.googleMapsUri || '',
     }));
@@ -207,18 +219,31 @@ router.get('/details', async (req, res) => {
     const id = normalizePlaceResourceId(idRaw);
     if (!id) return res.status(400).json({ error: 'id required' });
 
-    const fieldMask =
-      'id,displayName,formattedAddress,location,regularOpeningHours,photos,googleMapsUri';
+    const fieldMask = [
+      'id',
+      'displayName',
+      'formattedAddress',
+      'location',
+      'regularOpeningHours.periods',
+      'regularOpeningHours.weekdayDescriptions',
+      'currentOpeningHours.periods',
+      'currentOpeningHours.weekdayDescriptions',
+      'photos',
+      'googleMapsUri',
+    ].join(',');
 
-    // ✅ encodeURIComponent 제거 (502 방지)
+    // ✅ URL에서 fields= 제거 (헤더로 보냄)
     const url = `https://places.googleapis.com/v1/${id}?languageCode=ko&regionCode=KR`;
 
     const r = await fetch(url, {
-      headers: { 'X-Goog-Api-Key': API_KEY, 'X-Goog-FieldMask': fieldMask },
+      headers: {
+        'X-Goog-Api-Key': API_KEY,
+        'X-Goog-FieldMask': fieldMask,     // ✅ 핵심
+        'Content-Type': 'application/json; charset=utf-8',
+      },
     });
 
     const data = await r.json().catch(() => ({}));
-
     if (!r.ok) {
       console.error('[places:details fail]', r.status, data?.error?.message);
       const msg = data?.error?.message || r.statusText;
@@ -229,7 +254,46 @@ router.get('/details', async (req, res) => {
       throw err;
     }
 
-    // ✅ 사진 프록시 방식 적용
+    // ─────────────────────────────────────────────────────────
+   // 🟢 폴백 1단계: fetchPlace가 영업시간을 못 줄 경우 searchText로 보강
+   let opening =
+     data?.regularOpeningHours || data?.currentOpeningHours || null;
+   if (!opening) {
+     const textQuery =
+       (data?.displayName?.text || data?.displayName || '').trim() ||
+       (data?.formattedAddress || '').trim() ||
+       id; // 마지막 수단
+
+     try {
+       const fb = await postJSON(
+        'https://places.googleapis.com/v1/places:searchText',
+         {
+           textQuery,
+           languageCode: 'ko',
+           regionCode: 'KR',
+         },
+         [
+           'places.id',
+           'places.regularOpeningHours.periods',
+           'places.regularOpeningHours.weekdayDescriptions',
+           'places.currentOpeningHours.periods',
+           'places.currentOpeningHours.weekdayDescriptions',
+         ].join(',')
+       );
+
+       const list = Array.isArray(fb?.places) ? fb.places : [];
+       // 동일 id 우선, 없으면 첫 항목
+       const same = list.find(p => (p?.id && normalizePlaceResourceId(p.id) === normalizePlaceResourceId(data?.id)));
+       const pick = same || list[0] || null;
+       if (pick) {
+         opening = pick?.regularOpeningHours || pick?.currentOpeningHours || null;
+       }
+     } catch (fbErr) {
+       console.warn('[places:details fallback searchText failed]', fbErr?.code || '', fbErr?.message || '');
+     }
+   }
+   // ─────────────────────────────────────────────────────────
+
     const photoName = data?.photos?.[0]?.name || '';
     const photoUrl = photoName
       ? `/api/places/photo?name=${encodeURIComponent(photoName)}&w=640&h=480`
@@ -240,10 +304,11 @@ router.get('/details', async (req, res) => {
       displayName: data?.displayName || null,
       formattedAddress: data?.formattedAddress || '',
       location: data?.location || null,
-      regularOpeningHours: data?.regularOpeningHours || null,
+      // ✅ regular || current 폴백 유지
+      regularOpeningHours: opening || null,
       googleMapsUri: data?.googleMapsUri || '',
       photoName,
-      photoUrl, // ✅ 클라이언트에서 바로 <img src=photoUrl /> 가능
+      photoUrl,
     });
   } catch (e) {
     console.error('[places:details]', e.code, e.detail || e.message);
@@ -252,6 +317,7 @@ router.get('/details', async (req, res) => {
       .json({ error: 'places details failed', code: e.code, detail: e.detail });
   }
 });
+
 
 router.get('/photo', async (req, res) => {
   try {

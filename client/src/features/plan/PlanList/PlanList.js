@@ -121,8 +121,7 @@ export default function PlanList() {
     const t = todayYMD();
     const { days, nights } = diffDays(p.start_date, p.end_date);
     const done = p.end_date && p.end_date < t;
-    const thumb = p.thumbnail_url || '/assets/default_plan.jpg';
-    const tags = (() => {
+    const thumb = p.thumbnail_url || p.thumbnailUrl || p.thumbnail || '';    const tags = (() => {
       try { return typeof p.prefs === 'string' ? JSON.parse(p.prefs) : (p.prefs || []); } catch { return []; }
     })();
 
@@ -165,7 +164,13 @@ export default function PlanList() {
         onClick={goDetail}
       >
         <div className="relative h-44 w-full overflow-hidden">
-          <img src={thumb} alt="" className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300" />
+          {thumb ? (
+            <img src={thumb} className="w-full h-40 object-cover rounded-xl" alt="" />
+          ) : (
+            <div className="w-full h-40 rounded-xl bg-zinc-100 grid place-items-center text-xs text-zinc-400">
+              이미지 없음
+            </div>
+          )}
           {days > 0 && (
             <div className="absolute top-2 right-2 text-[11px] bg-black/65 text-white px-2 py-1 rounded-full backdrop-blur">
               {nights}박 {days}일

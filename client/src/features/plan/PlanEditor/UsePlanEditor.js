@@ -1,8 +1,8 @@
 // client/src/features/plan/PlanEditor/UsePlanEditor.js
 // client/src/features/plan/PlanEditor/UsePlanEditor.js
 import { useEffect, useRef, useState, useMemo } from 'react';
-import axios from 'axios';
-import { useGoogleMapsLoader } from '../../../lib/GoogleMapsLoader';
+import axios from '../../../api/axiosInstance';
+import useGoogleMapsLoader from '../../../lib/GoogleMapsLoader';
 import UsePlacesAutocomplete from '../../../lib/UsePlacesAutocomplete';
 import TravelRegions from '../../../data/TravelRegions';
 
@@ -54,19 +54,66 @@ const reconcileDays = (dates, prevDays) => {
 
 const normalizeOpeningHours = (oh) => {
   if (!oh) return null;
-  if (oh.periods && oh.periods.length && oh.periods[0]?.open?.day !== undefined) return oh;
-  const dayMap = { SUNDAY:0, MONDAY:1, TUESDAY:2, WEDNESDAY:3, THURSDAY:4, FRIDAY:5, SATURDAY:6 };
-  if (oh.periods && oh.periods.length && (oh.periods[0]?.openDay || oh.periods[0]?.closeDay)) {
-    return {
-      periods: oh.periods.map(p => ({
-        open:  { day: dayMap[p.openDay],  time: String(p.openTime  || '').padStart(4, '0') },
-        close: { day: dayMap[p.closeDay ?? p.openDay], time: String(p.closeTime || '').padStart(4, '0') }
-      }))
-    };
-  }
-  return null;
-};
 
+  // 이미 v3이면서 time 문자열이 있는 형태라면 그대로 사용
+  if (oh.periods && oh.periods.length && oh.periods[0]?.open?.time) return oh;
+
+  // ✅ v3(day/hour/minute) → v3(time:"HHmm")로 변환
+  if (oh.periods && oh.periods.length && (oh.periods[0]?.open?.hour !== undefined || oh.periods[0]?.close?.hour !== undefined)) {
+    const pad = (n) => String(n ?? 0).padStart(2, '0');
+    const toTime = (obj) => {
+      if (!obj) return undefined;
+      const hh = pad(obj.hour);
+      const mm = pad(obj.minute);
+      // 일부 응답은 minute가 없을 수 있음 → "HH00"로 보정
+      return `${hh}${mm}`;
+    };
+
+    const periods = [];
+    for (const p of oh.periods) {
+      const od = p.open?.day;
+      const cd = (p.close?.day !== undefined) ? p.close.day : p.open?.day;
+      const otS = toTime(p.open);
+      const ctS = toTime(p.close);
+
+      // ❗시간이 하나라도 없으면 애매한 구간 → 스킵(가짜 00:00 안 만듦)
+      if ((od === undefined) || !otS || !ctS) continue;
+
+      periods.push({
+        open:  { day: od, time: otS },
+        close: { day: (cd ?? od), time: ctS },
+      });
+    }
+
+    const out = { periods };
+    // weekdayDescriptions가 있다면 그대로 보존
+    if (Array.isArray(oh.weekdayDescriptions)) out.weekdayDescriptions = oh.weekdayDescriptions;
+    return periods.length ? out : (Array.isArray(oh.weekdayDescriptions) ? { weekdayDescriptions: oh.weekdayDescriptions } : null);
+  }
+
+  // ✅ v1(openDay/openTime/closeDay/closeTime) → v3(time:"HHmm")
+  if (oh.periods && oh.periods.length && (oh.periods[0]?.openDay || oh.periods[0]?.closeDay)) {
+    const dayMap = { SUNDAY:0, MONDAY:1, TUESDAY:2, WEDNESDAY:3, THURSDAY:4, FRIDAY:5, SATURDAY:6 };
+    const periods = [];
+    for (const p of oh.periods) {
+      const od = dayMap[p.openDay];
+      const cd = dayMap[p.closeDay ?? p.openDay];
+      const otS = (p.openTime ?? '').toString().trim();
+      const ctS = (p.closeTime ?? '').toString().trim();
+      if ((od === undefined) || !otS || !ctS) continue;
+      periods.push({
+        open:  { day: od, time: otS.padStart(4, '0') },
+        close: { day: (cd ?? od), time: ctS.padStart(4, '0') },
+      });
+    }
+    const out = { periods };
+    if (Array.isArray(oh.weekdayDescriptions)) out.weekdayDescriptions = oh.weekdayDescriptions;
+    return periods.length ? out : (Array.isArray(oh.weekdayDescriptions) ? { weekdayDescriptions: oh.weekdayDescriptions } : null);
+  }
+
+  // 변환 불가
+  return Array.isArray(oh.weekdayDescriptions) ? { weekdayDescriptions: oh.weekdayDescriptions } : null;
+};
 const normalizePlaceId = (pid) => {
   if (!pid) return null;
   const s = String(pid);
@@ -232,9 +279,20 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
             lng: it.lng ?? null,
             placeId: it.place_id || null,
             openingHours: (() => {
-              if (!it.opening_hours) return null;
-              try { return typeof it.opening_hours === 'string' ? JSON.parse(it.opening_hours) : it.opening_hours; }
-              catch { return null; }
+              // 1) DB에서 오는 snake_case, 혹은 우발적으로 camelCase로 저장된 경우 둘 다 수용
+              const raw =
+                (it.openingHours ?? it.opening_hours) ?? null;
+
+              if (!raw) return null;
+
+              // 2) 문자열이면 JSON 파싱
+              const parsed = (() => {
+                try { return typeof raw === 'string' ? JSON.parse(raw) : raw; }
+                catch { return null; }
+              })();
+
+              // 3) v1 포맷이면 v3 스타일로 정규화
+              return normalizeOpeningHours(parsed) || parsed || null;
             })(),
             photoUrl: '',
           });
@@ -282,9 +340,20 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
         lng: it.lng ?? null,
         placeId: it.place_id || null,
         openingHours: (() => {
-          if (!it.opening_hours) return null;
-          try { return typeof it.opening_hours === 'string' ? JSON.parse(it.opening_hours) : it.opening_hours; }
-          catch { return null; }
+          // 1) DB에서 오는 snake_case, 혹은 우발적으로 camelCase로 저장된 경우 둘 다 수용
+          const raw =
+            (it.openingHours ?? it.opening_hours) ?? null;
+
+          if (!raw) return null;
+
+          // 2) 문자열이면 JSON 파싱
+          const parsed = (() => {
+            try { return typeof raw === 'string' ? JSON.parse(raw) : raw; }
+            catch { return null; }
+          })();
+
+          // 3) v1 포맷이면 v3 스타일로 정규화
+          return normalizeOpeningHours(parsed) || parsed || null;
         })(),
         photoUrl: '',
       });
@@ -390,109 +459,115 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
   useEffect(() => {
     const Place = window.google?.maps?.places?.Place;
     if (!Place) return;
-    const nextIds = Array.from(new Set(mapPreds.map((p) => p.place_id).filter(Boolean)));
 
-    const fetchWithFallback = async (pid, pred) => {
+    let isCancelled = false; // 언마운트/의존성 변경 방지
+
+    // 1) 자동완성에서 온 id들만 대상
+    const nextIds = Array.from(
+      new Set(
+        (mapPreds || [])
+          .map((p) => p.place_id)
+          .filter(Boolean)
+          // ❗ 사진 리소스 경로 같은 건 무시해서 GetPlace 400 방지
+          .filter((id) => !String(id).includes('/photos/'))
+      )
+    );
+
+    // 2) 캐시에 없는 항목만 프리패치
+    const targets = nextIds.filter((id) => !detailCache[id]);
+    if (!targets.length) return;
+
+    const fetchOne = async (pid, pred) => {
+      const normId = pid.startsWith('places/') ? pid : `places/${pid}`;
+
       try {
-        const place = new Place({ id: normalizePlaceId(pid), requestedLanguage: 'ko', requestedRegion: 'KR' });
+        // 1차: JS SDK 디테일
+        const place = new Place({
+          id: normId,
+          requestedLanguage: 'ko',
+          requestedRegion: 'KR',
+        });
+
         const det = await place.fetchFields({
-          fields: ['id','displayName','formattedAddress','regularOpeningHours','photos']
+          fields: ['id','displayName','formattedAddress','regularOpeningHours','photos'],
         });
-        const photoUrl = (() => {
-          const ph = det?.photos?.[0];
-          try { return ph?.getURI ? ph.getURI({ maxWidth: 320, maxHeight: 240 }) : ''; } catch { return ''; }
-        })();
-        setDetailCache((prev) => ({
-          ...prev,
-          [pid]: {
-            name: det?.displayName?.text || '',
-            address: det?.formattedAddress || '',
-            openingHours: normalizeOpeningHours(det?.regularOpeningHours) || null,
-            photoUrl,
-          },
-        }));
-        return;
-      } catch {
-        // fallthrough
-      }
 
-      let v3id = null;
-      try {
-        const main = pred?.structured_formatting?.main_text || '';
-        const sec  = pred?.structured_formatting?.secondary_text || '';
-        const q = (main && sec) ? `${main} ${sec}` : (pred?.description || main || '');
-        if (!q) throw new Error('no query');
+        // 사진만 추출 (썸네일은 200px대로 낮춰 초기 로드 빠르게)
+        let photoUrl = '';
+        const ph = det?.photos?.[0];
+        if (ph && typeof ph.getURI === 'function') {
+          photoUrl = ph.getURI({ maxWidth: 200, maxHeight: 200 });
+        }
 
-        const center = mapRef.current?.getCenter?.();
-        const lat = center?.lat?.() ?? 37.5665;
-        const lng = center?.lng?.() ?? 126.9780;
-
-        const r = await axios.get('/api/places/search', { params: { q, lat, lng, global: 1 } }).catch(() => null);
-        const v3 = r?.data?.places?.[0];
-        v3id = v3?.id;
-        if (!v3id) throw new Error('no v3id');
-
-        const place2 = new Place({ id: normalizePlaceId(v3id), requestedLanguage: 'ko', requestedRegion: 'KR' });
-        const det2 = await place2.fetchFields({
-          fields: ['id','displayName','formattedAddress','regularOpeningHours','photos']
-        });
-        const photoUrl2 = (() => {
-          const ph = det2?.photos?.[0];
-          try { return ph?.getURI ? ph.getURI({ maxWidth: 320, maxHeight: 240 }) : ''; } catch { return ''; }
-        })();
-        setDetailCache((prev) => ({
-          ...prev,
-          [pid]: {
-            name: det2?.displayName?.text || v3?.displayName?.text || main || '',
-            address: det2?.formattedAddress || v3?.formattedAddress || sec || '',
-            openingHours: normalizeOpeningHours(det2?.regularOpeningHours) || null,
-            photoUrl: photoUrl2
-          },
-        }));
-        return;
-      } catch {
-        // fallthrough
-      }
-
-      try {
-        const fallbackId = normalizePlaceId(v3id || pid);
-        const resp = await axios.get('/api/places/details', {
-          params: {
-            id: fallbackId,
-            sessionToken,
-          },
-        }).catch(() => null);
-        const det = resp?.data;
-        if (det) {
-          const proxiedPhoto =
-            det?.photoName
-              ? `/api/places/photo?name=${encodeURIComponent(det.photoName)}&w=640&h=480`
-              : (det?.photoUrl || '');
-
+        if (!isCancelled) {
           setDetailCache((prev) => ({
             ...prev,
             [pid]: {
               name: det?.displayName?.text || pred?.structured_formatting?.main_text || '',
               address: det?.formattedAddress || pred?.structured_formatting?.secondary_text || '',
               openingHours: det?.regularOpeningHours || null,
-              photoUrl: proxiedPhoto,
+              photoUrl,
             },
           }));
         }
-      } catch {}
+      } catch {
+        // 2차: 서버 폴백(/api/places/details)
+        try {
+          const resp = await axios.get('/api/places/details', { params: { id: normId } });
+          const det = resp?.data;
+          if (!det) return;
+
+          const viaProxy = det?.photoName
+            ? `/api/places/photo?name=${encodeURIComponent(det.photoName)}&w=320&h=240`
+            : det?.photoUrl || '';
+
+          if (!isCancelled) {
+            setDetailCache((prev) => ({
+              ...prev,
+              [pid]: {
+                name: det?.displayName?.text || pred?.structured_formatting?.main_text || '',
+                address: det?.formattedAddress || pred?.structured_formatting?.secondary_text || '',
+                openingHours: det?.regularOpeningHours || null,
+                photoUrl: viaProxy,
+              },
+            }));
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     };
 
-    nextIds.forEach((pid) => {
-      if (detailCache[pid]) return;
-      const pred = mapPreds.find((p) => p.place_id === pid) || {};
-      fetchWithFallback(pid, pred);
-    });
-  }, [mapPreds, detailCache, sessionToken]);
+    // ✅ 이 안에서만 await 사용 (IIFE)
+    (async () => {
+      // 상위 후보 6개 우선 병렬 프리패치 → 체감 속도 상승
+      const burst = targets.slice(0, 6);
+      await Promise.allSettled(
+        burst.map((pid) => {
+          const pred = (mapPreds || []).find((p) => p.place_id === pid);
+          return fetchOne(pid, pred);
+        })
+      );
+
+      // 남은 후보는 살살(최대 6개)
+      const rest = targets.slice(6, 12);
+      for (const pid of rest) {
+        const pred = (mapPreds || []).find((p) => p.place_id === pid);
+        // 느긋하게 처리(굳이 await 안 걸어도 됨)
+        fetchOne(pid, pred);
+      }
+    })();
+
+    return () => { isCancelled = true; };
+    // detailCache는 의도적으로 제외 (루프 방지)
+  }, [mapPreds]);
+
+
 
   const applyDetailToEntry = (entryId, detail, labelFallback) => {
     const getPhotoUrl = (obj) => {
       const p = obj?.photos?.[0];
-      try { return p?.getURI ? p.getURI({ maxWidth: 640, maxHeight: 480 }) : ''; } catch { return ''; }
+      try { return p?.getURI ? p.getURI({ maxWidth: 320, maxHeight: 200 }) : ''; } catch { return ''; }
     };
     updateEntry(entryId, {
       title: detail?.displayName?.text || detail?.name || labelFallback || '',
@@ -500,7 +575,17 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
       lat: detail?.geometry?.location?.lat?.() ?? detail?.location?.lat?.() ?? null,
       lng: detail?.geometry?.location?.lng?.() ?? detail?.location?.lng?.() ?? null,
       placeId: detail?.place_id || detail?.id || null,
-      openingHours: normalizeOpeningHours(detail?.regularOpeningHours || detail?.opening_hours) || null,
+      openingHours: (() => {
+        const raw =
+          detail?.openingHours ??              // 혹시 camel 로도 오는 경우
+          detail?.regularOpeningHours ??       // JS SDK v3 정식 필드
+          detail?.regular_opening_hours ??     // 서버/레거시 snake
+          detail?.opening_hours ??             // 서버/레거시 snake
+          null;
+
+        const normalized = normalizeOpeningHours(raw);
+        return normalized || raw || null;
+      })(),
       photoUrl: getPhotoUrl(detail),
     });
     setSelectedEntryId(entryId);
@@ -623,6 +708,57 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     });
   };
 
+    // 🔁 기존 일정 중 openingHours가 비어 있고 placeId만 있는 항목을 백필
+  useEffect(() => {
+    // 읽기전용이면 굳이 백필할 필요 없음
+    if (isReadonly) return;
+
+    // 스캔: 비어 있는 항목 모으기
+    const targets = [];
+    days.forEach((d, di) => {
+      (d.entries || []).forEach((en) => {
+        if (!en.openingHours && en.placeId && !String(en.placeId).includes('/photos/')) {
+          targets.push({ di, id: en.id, placeId: en.placeId });
+        }
+      });
+    });
+    if (targets.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      // 너무 많이 돌지 않게 10개 정도만 우선 백필
+      for (const t of targets.slice(0, 10)) {
+        try {
+          const pid = t.placeId.startsWith('places/') ? t.placeId : `places/${t.placeId}`;
+          const resp = await axios.get('/api/places/details', { params: { id: pid } });
+          const det = resp?.data;
+          const raw = det?.regularOpeningHours || null;
+          if (!raw) continue;
+
+          const fixed = normalizeOpeningHours(raw) || raw;
+          if (cancelled || !fixed) continue;
+
+          // state 업데이트
+          setDays((prev) => {
+            const copy = structuredClone(prev);
+            const list = copy[t.di]?.entries || [];
+            const idx = list.findIndex((e) => e.id === t.id);
+            if (idx >= 0) {
+              list[idx].openingHours = fixed;
+            }
+            return copy;
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // days가 바뀔 때마다 새로 스캔하지만, 실제 업데이트는 비어있는 항목에만 반영됨
+  }, [days, isReadonly, setDays]);
+
+
   const showOnMap = (en) => {
     if (!isLoaded) return;
     if (en.lat && en.lng) { setSelectedEntryId(en.id); return; }
@@ -641,28 +777,63 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
 
   const togglePref = (k) => setPrefs((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
 
-  const collectPhotoCandidates = async () => {
-    const urls = new Set(days.flatMap(d => d.entries.map(en => en.photoUrl).filter(Boolean)));
-    const pids = Array.from(new Set(days.flatMap(d => d.entries.map(en => en.placeId).filter(Boolean)))).slice(0, 25);
+// ✅ 일정에 있는 장소들에서 썸네일 후보 6개 정도 뽑기
+const collectPhotoCandidates = async () => {
+  const urls = new Set(
+    days.flatMap((d) => d.entries.map((en) => en.photoUrl).filter(Boolean))
+  );
 
-    const Place = window.google?.maps?.places?.Place;
-    const pick = (det) => {
-      const p = det?.photos?.[0];
-      try { return p?.getURI ? p.getURI({ maxWidth: 640, maxHeight: 480 }) : ''; } catch { return ''; }
-    };
+  const pids = Array.from(
+    new Set(
+      days
+        .flatMap((d) => d.entries.map((en) => en.placeId).filter(Boolean))
+    )
+  )
+    .filter((id) => !String(id).includes('/photos/'))   // ← 이거 한 줄
+    .slice(0, 25);
 
-    for (const pid of pids) {
-      if (urls.size >= 30) break;
-      try {
-        if (Place) {
-          const det = await new Place({ id: normalizePlaceId(pid), requestedLanguage: 'ko', requestedRegion: 'KR' }).fetchFields({ fields: ['photos'] });
-          const u = pick(det);
-          if (u) urls.add(u);
-        }
-      } catch {}
+  const Place = window.google?.maps?.places?.Place;
+  const pick = (det) => {
+    const p = det?.photos?.[0];
+    try {
+      return p?.getURI ? p.getURI({ maxWidth: 640, maxHeight: 480 }) : '';
+    } catch {
+      return '';
     }
-    return Array.from(urls);
   };
+
+  for (const pid of pids) {
+    if (urls.size >= 30) break;
+    try {
+      if (Place) {
+        const det = await new Place({
+          id: pid.startsWith('places/') ? pid : `places/${pid}`,
+          requestedLanguage: 'ko',
+          requestedRegion: 'KR',
+        }).fetchFields({ fields: ['photos'] });
+
+        const u = pick(det);
+        if (u) urls.add(u);
+        continue;
+      }
+    } catch {}
+
+    // 서버 폴백
+    try {
+      const resp = await axios.get('/api/places/details', {
+        params: { id: pid.startsWith('places/') ? pid : `places/${pid}` },
+      });
+      const det = resp?.data;
+      const viaProxy = det?.photoName
+        ? `/api/places/photo?name=${encodeURIComponent(det.photoName)}&w=640&h=480`
+        : det?.photoUrl || '';
+      if (viaProxy) urls.add(viaProxy);
+    } catch {}
+  }
+
+  return Array.from(urls).slice(0, 6);
+};
+
 
   const toNotesAndItems = (thumbnailUrl) => {
     const notes = {};
@@ -696,7 +867,7 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
     if (!start || !end) return alert('날짜를 설정하세요.');
 
     const { notes, items } = toNotesAndItems(thumbnailUrl);
-    const payload = { title, country, region, prefs, start_date: start || null, end_date: end || null, notes, items, is_shared: isShared };
+    const payload = { title, country, region, prefs, start_date: start || null, end_date: end || null, notes: JSON.stringify(notes), items, is_shared: isShared };
 
     try {
       if (isEdit) await axios.put(`/api/plans/${planId}`, payload);

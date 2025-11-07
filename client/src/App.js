@@ -35,7 +35,7 @@ function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) return;
+    if (!token) { setUser(null); return; }
 
     try {
       const decoded = jwtDecode(token);
@@ -43,18 +43,30 @@ function App() {
       setUser({ id: decoded.id, nickname: decoded.nickname });
 
       // 2차: 서버 프로필로 덮어쓰기(avatarUrl 포함)
-      axios.get('/api/users/me').then(({ data }) => {
-        setUser((u) => ({
-          ...u,
-          nickname: data?.nickname ?? u?.nickname,
-          avatarUrl: data?.avatarUrl || u?.avatarUrl,
-          email: data?.email ?? u?.email,
-          role: data?.role ?? u?.role,
-        }));
-      });
+      axios.get('/api/users/me')
+       .then(({ data }) => {
+         setUser((u) => ({
+           ...u,
+           nickname: data?.nickname ?? u?.nickname,
+           avatarUrl: data?.avatarUrl || u?.avatarUrl,
+           email: data?.email ?? u?.email,
+           role: data?.role ?? u?.role,
+         }));
+       })
+       .catch((e) => {
+         // 401=비로그인/만료 → 조용히 로그아웃 상태로 시작
+         if (e?.response?.status === 401) {
+           localStorage.removeItem('token');
+           setUser(null);
+         } else {
+           // 그 외는 개발 중 확인만, 앱은 계속 동작
+           console.error('[/api/users/me] failed', e);
+         }
+       });
     } catch (err) {
       console.error('토큰 디코딩 실패', err);
       localStorage.removeItem('token');
+      setUser(null);
     }
   }, []);
 

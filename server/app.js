@@ -58,23 +58,30 @@ const allowlist = new Set(
   [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://localhost:4000',      // ← 추가
+    'http://127.0.0.1:4000',      // ← 추가
     process.env.CLIENT_ORIGIN,
     ...(process.env.ALLOWED_ORIGINS || '')
       .split(',')
-      .map(s => s.trim())
+      .map((s) => s.trim())
       .filter(Boolean),
   ].filter(Boolean)
 );
 
-app.use(cors({
-  origin(origin, cb) {
-    if (!origin || allowlist.has(origin)) return cb(null, true);
-    cb(new Error(`CORS blocked: ${origin}`));
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
-}));
+app.use(
+  cors({
+    origin(origin, cb) {
+      // 포스트맨이나 서버 내부 호출처럼 Origin 없는 건 허용
+      if (!origin) return cb(null, true);
+      if (allowlist.has(origin)) return cb(null, true);
+      console.warn('[CORS blocked]', origin); 
+      return cb(new Error(`CORS blocked: ${origin}`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);  
 
 app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));

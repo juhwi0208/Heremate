@@ -27,7 +27,7 @@ const tagTone = (t) => {
 export default function SharedPlanCard({ plan }) {
   const nav = useNavigate();
   const { days, nights } = diffDays(plan.start_date, plan.end_date);
-  const thumb = plan.thumbnail_url || '/assets/default_plan.jpg';
+  const thumb = plan.thumbnail_url || plan.thumbnailUrl || plan.thumbnail || '';
 
   // prefs: string(json) | string[] | undefined
   const tags = React.useMemo(() => {
@@ -47,12 +47,21 @@ export default function SharedPlanCard({ plan }) {
     >
       {/* 썸네일 */}
       <div className="relative h-44 w-full overflow-hidden">
-        <img
-          src={thumb}
-          alt=""
-          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
-          loading="lazy"
-        />
+        {thumb ? (
+          <img
+            src={thumb}
+            alt=""
+            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full bg-zinc-100 grid place-items-center text-xs text-zinc-400">
+            이미지 없음
+          </div>
+        )}
+
+
+
         {days > 0 && (
           <div className="absolute top-2 right-2 text-[11px] bg-black/65 text-white px-2 py-1 rounded-full backdrop-blur">
             {nights}박 {days}일

@@ -1,55 +1,61 @@
-// src/lib/GoogleMapsLoader.js
+// client/src/lib/GoogleMapsLoader.js
 import { useMemo } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
 
-/**
- * ✅ 단일(싱글톤) 로더 옵션
- * - 여기 옵션이 한 번 정해지면 앱 전역에서 절대 바뀌지 않게 유지해야
- *   "Loader must not be called again with different options" 에러가 안 납니다.
- * - language: 'ko', region: 'KR' 로 한국 사용자 기본값 고정
- */
-// 🔁 교체: 키 읽기 (Vite + CRA 모두 지원) + 빈 키면 로더 호출 중단
-const GOOGLE_MAPS_API_KEY =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY) ||
-  process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
-  '';
+// 전역에 최초 옵션을 저장해서, 이후 호출에서 *반드시* 같은 옵션을 쓰도록 한다.
+const GMAPS_GLOBAL = '__heremate_gmaps_loader_options__';
 
-console.log('[DEBUG] GMAPS KEY]', GOOGLE_MAPS_API_KEY ? GOOGLE_MAPS_API_KEY.slice(0,6)+'…' : '(empty)');
+function getStableOptions() {
+  const w = window;
+  const apiKey =
+    process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
+    process.env.VITE_GOOGLE_MAPS_API_KEY ||
+    process.env.REACT_APP_GCP_API_KEY ||
+    '';
 
-const LIBRARIES = ['places', 'marker'];
+  // 기본은 ko/KR로 고정 (다국어가 꼭 필요하면 .env 로만 바꾸세요)
+  const base = {
+    id: 'heremate-script-loader',
+    version: 'weekly',
+    googleMapsApiKey: apiKey,
+    libraries: ['places', 'marker'],
+    language:
+      process.env.REACT_APP_GMAPS_LANG ||
+      process.env.VITE_GMAPS_LANG ||
+      'ko',
+    region:
+      process.env.REACT_APP_GMAPS_REGION ||
+      process.env.VITE_GMAPS_REGION ||
+      'KR',
+  };
 
-// 절대 바뀌지 않는 싱글톤 옵션 (옵션이 바뀌면 라이브러리가 에러를 냄)
-export const GOOGLE_LOADER_OPTIONS = Object.freeze({
-  id: 'script-loader',
-  version: 'weekly',
-  googleMapsApiKey: GOOGLE_MAPS_API_KEY, // ← react-google-maps/api v2 권장 키 명
-  libraries: LIBRARIES,
-  language: 'ko',
-  region: 'KR',
-  mapIds: [],
-  nonce: '',
-  url: 'https://maps.googleapis.com/maps/api/js',
-  authReferrerPolicy: 'origin',
-});
+  // 이미 이전 호출이 있었다면, 같은 옵션을 재사용
+  if (w[GMAPS_GLOBAL]) return w[GMAPS_GLOBAL];
+  w[GMAPS_GLOBAL] = base;
+  return base;
+}
 
-/**
- * 앱 전역에서 사용할 로더 훅
- * - 어디서든 이 훅만 쓰면 로더 중복/옵션불일치가 발생하지 않습니다.
- */
-export function useGoogleMapsLoader() {
-  // options 객체는 절대 새로 만들지 않도록 고정
-  const options = GOOGLE_LOADER_OPTIONS;
+export default function useGoogleMapsLoader() {
+  const stable = useMemo(() => getStableOptions(), []);
+  const { isLoaded, loadError } = useJsApiLoader(stable);
 
-  // useMemo로 안전하게 유지(실제로는 고정 객체라 재생성 안됨)
-  const stableOpts = useMemo(() => options, [options]);
-
-  const result = useJsApiLoader(stableOpts);
-
-  if (!GOOGLE_MAPS_API_KEY && typeof window !== 'undefined') {
-    // 키가 비어 있을 경우 콘솔 경고만(UX 영향 최소화)
-    // eslint-disable-next-line no-console
-    console.warn('[googleMapsLoader] Missing GOOGLE MAPS API KEY. Set REACT_APP_GOOGLE_MAPS_API_KEY or VITE_GOOGLE_MAPS_API_KEY.');
+  if (process.env.NODE_ENV !== 'production') {
+    // 디버그 찍기
+    if (loadError) {
+      // eslint-disable-next-line no-console
+      console.error('[googleMapsLoader] loadError:', loadError);
+    } else {
+      // eslint-disable-next-line no-console
+      console.debug(
+        '[googleMapsLoader] Options:',
+        JSON.stringify(
+          { id: stable.id, lang: stable.language, region: stable.region, libs: stable.libraries },
+          null,
+          2
+        )
+      );
+    }
   }
 
-  return result; // { isLoaded, loadError }
+  return { isLoaded, loadError };
 }

@@ -16,6 +16,7 @@ export default function PlanEditor() {
   const location = useLocation();
   const isEdit = Boolean(id);
   const isReadonly = location.pathname.endsWith('/readonly');
+  
 
   const {
     title, setTitle, country, setCountry, region, setRegion,
@@ -35,6 +36,7 @@ export default function PlanEditor() {
   const [thumbOpen, setThumbOpen] = useState(false);
   const [thumbPool, setThumbPool] = useState([]);
   const [thumbSix, setThumbSix] = useState([]);
+  const [selectedThumb, setSelectedThumb] = useState('');
 
   const pickRandom = (arr, n) => {
     const copy = [...arr];
@@ -47,14 +49,33 @@ export default function PlanEditor() {
 
   const onClickSave = async () => {
     if (isReadonly) return;
+
+    // 이미 썸네일을 하나 선택한 상태라면 → 바로 저장
+    if (selectedThumb) {
+      await doPersist(selectedThumb);
+      return;
+    }
+
+    // 아직 안 골랐으면 → 그때만 후보를 모아서 모달을 연다
     const pool = await collectPhotoCandidates();
     setThumbPool(pool);
     setThumbSix(pickRandom(pool, Math.min(6, pool.length)));
     setThumbOpen(true);
   };
 
+  const onSelectThumbAndSave = async (urlOrNull) => {
+    setThumbOpen(false);
+
+    // 사용자가 실제로 고른 경우 → 그걸 state에도 저장
+    if (urlOrNull) {
+      setSelectedThumb(urlOrNull);
+    }
+
+    await doPersist(urlOrNull);
+  };
+
+
   const handleShuffleThumbs = () => setThumbSix(pickRandom(thumbPool, Math.min(6, thumbPool.length)));
-  const onSelectThumbAndSave = async (urlOrNull) => { setThumbOpen(false); await doPersist(urlOrNull); };
 
   const selectedEntry = useMemo(() => {
     const d = days[activeIdx];
