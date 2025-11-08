@@ -15,7 +15,7 @@ export default function SignUp() {
 
   // 폼 상태
   const [email, setEmail] = useState('');
-  const [emailChecked, setEmailChecked] = useState(false);
+  
   const [emailAvailable, setEmailAvailable] = useState(false);
 
   const [code, setCode] = useState('');
@@ -35,10 +35,10 @@ export default function SignUp() {
       setLoading(true);
       const { data } = await axios.get('/auth/check-email', { params: { email } });
       if (data.exists) {
-        setEmailChecked(true); setEmailAvailable(false);
+         setEmailAvailable(false);
         setErr('이미 사용 중인 이메일입니다.');
       } else {
-        setEmailChecked(true); setEmailAvailable(true);
+         setEmailAvailable(true);
         setMsg('사용 가능한 이메일입니다. 인증 코드를 보내세요.');
       }
     } catch {
@@ -131,7 +131,7 @@ export default function SignUp() {
                 <Input
                   type="email"
                   value={email}
-                  onChange={(e) => { setEmail(e.target.value); setEmailChecked(false); setEmailAvailable(false); }}
+                  onChange={(e) => { setEmail(e.target.value); setEmailAvailable(false); }}
                   placeholder="you@example.com"
                 />
                 <div className="flex gap-2">

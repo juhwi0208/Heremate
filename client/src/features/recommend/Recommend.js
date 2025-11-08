@@ -84,7 +84,6 @@ export default function Recommend() {
 
   // 후보 바뀌면 상세(특히 사진) 채우기
   useEffect(() => {
-    const svc   = placesSvcRef.current;
     const Place = window.google?.maps?.places?.Place;
 
     const byPid = mapPreds.filter((p) => p.place_id);

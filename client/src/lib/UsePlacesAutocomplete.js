@@ -4,7 +4,8 @@ import axios from '../api/axiosInstance';
 // 세션 토큰 생성(간단 UUID v4 대체)
 function makeToken() {
   return 'xxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : ((r & 0x3) | 0x8); // 우선순위 명확화(기능 동일)
     return v.toString(16);
   });
 }
@@ -102,7 +103,7 @@ export default function UsePlacesAutocomplete({
       if (timerRef.current) clearTimeout(timerRef.current);
       if (abortRef.current) abortRef.current.abort();
     };
-  }, [enabled, p]);
+  }, [enabled, p, debounceMs]);
 
   // 세션 리셋(사용자가 입력창을 포커스 잃었다가 다시 시작하면 새 세션으로)
   const resetSession = () => {
