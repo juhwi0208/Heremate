@@ -16,6 +16,7 @@ import KakaoRedirectHandler from './pages/KakaoRedirectHandler';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import MyPage from './pages/MyPage';
+import ProfileTrust from './pages/ProfileTrust';
 import EmailChange from './pages/EmailChange';
 
 import MateList from './features/mate/MateList';
@@ -97,6 +98,7 @@ function App() {
               <Route path="/mypage" element={<MyPage setUser={setUser} />} />
               <Route path="/account/email" element={<EmailChange />} />
               <Route path="/auth/kakao/callback" element={<KakaoRedirectHandler setUser={setUser} />} />
+              <Route path="/profile/:id" element={<ProfileTrust />} />
 
               {/* 관리자 */}
               <Route path="/admin/users" element={<AdminUsers />} />
