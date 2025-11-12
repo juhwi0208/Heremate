@@ -112,6 +112,8 @@ app.use('/api/chats', chatRouter);
 app.use('/api/plans', plansRouter);
 app.use('/api/places', placesRouter);
 app.use('/api/users', userRouter);
+app.use('/api/reviews', require('./routes/reviews'));
+app.use('/api/reports', require('./routes/reports'));
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Not Found' }));

@@ -25,5 +25,10 @@ const upload = multer({ storage });
 router.get('/me', verifyToken, ctrl.getMe);
 router.put('/me', verifyToken, upload.single('avatar'), ctrl.updateMe);
 router.delete('/me', verifyToken, ctrl.deleteMe); // 🟢 Added
+router.get('/me', verifyToken, ctrl.getMe);
+router.put('/me', verifyToken, upload.single('avatar'), ctrl.updateMe);
+router.delete('/me', verifyToken, ctrl.deleteMe);
+// 🆕 신뢰 지표
+router.get('/:id/trust', verifyToken, ctrl.getTrust);
 
 module.exports = router;
