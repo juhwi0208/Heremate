@@ -62,7 +62,8 @@ const allowlist = new Set(
     'http://127.0.0.1:3000',
     'http://localhost:4000',      // ← 추가
     'http://127.0.0.1:4000',
-    'https://heremate.vercel.app',      // ← 추가
+    'https://heremate.vercel.app',
+    'heremate-git-release-2025-10-14-juhwis-projects.vercel.app',      // ← 추가
     process.env.CLIENT_ORIGIN,
     ...(process.env.ALLOWED_ORIGINS || '')
     
