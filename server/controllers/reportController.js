@@ -16,10 +16,27 @@ exports.create = async (req, res) => {
   try {
     // 동일 신고자→동일 대상 7일 내 1회 제한
     await conn.query(
-      `INSERT INTO reports (reporter_id, target_user_id, context, reason, ref_id, severity, status)
-       VALUES (?,?,?,?,?,?, 'pending')`,
-      [reporterId, target_user_id, context, reason, ref_id || null, severity]
+      `INSERT INTO reports (
+        reporter_id,
+        target_user_id,
+        context,
+        reason,
+        ref_id,
+        severity,
+        status,
+        detail
+      ) VALUES (?,?,?,?,?,?, 'pending', ?)`,
+      [
+        reporterId,
+        target_user_id,
+        context,
+        reason,
+        ref_id || null,
+        severity,
+        detail || null,
+      ]
     );
+
     conn.release();
     return res.json({ ok: true });
   } catch (e) {

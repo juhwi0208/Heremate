@@ -27,6 +27,10 @@ import ChatPage from './features/chat/ChatPage';
 
 import Recommend from './features/recommend/Recommend';
 
+import StoriesList from './features/story/StoriesList';
+import StoryDetail from './features/story/StoryDetail';
+import StoryEditor from './features/story/StoryEditor';
+
 import PlanList from './features/plan/PlanList/PlanList';
 import PlanEditor from './features/plan/PlanEditor/PlanEditor';
 
@@ -77,7 +81,6 @@ function App() {
   const isHome = path === '/';
   const isLanding = !user && path === '/';
 
-  const Stories = () => <div className="p-6">스토리 준비 중</div>;
 
   return (
     <>
@@ -95,10 +98,10 @@ function App() {
               <Route path="/login" element={<Login setUser={setUser} />} />
               <Route path="/signup" element={<SignUp setUser={setUser} />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/mypage" element={<MyPage setUser={setUser} />} />
+              <Route path="/mypage" element={<ProfileTrust />} />
               <Route path="/account/email" element={<EmailChange />} />
               <Route path="/auth/kakao/callback" element={<KakaoRedirectHandler setUser={setUser} />} />
-              <Route path="/profile/:id" element={<ProfileTrust />} />
+              
 
               {/* 관리자 */}
               <Route path="/admin/users" element={<AdminUsers />} />
@@ -123,7 +126,10 @@ function App() {
               <Route path="/plans/:id/readonly" element={<PlanEditor />} />
 
               {/* 스토리 */}
-              <Route path="/stories" element={<Stories />} />
+              <Route path="/stories" element={<StoriesList />} />
+              <Route path="/stories/:id" element={<StoryDetail />} />
+              <Route path="/stories/new" element={<StoryEditor />} />
+              
 
               {/* 404 */}
               <Route path="*" element={<div className="p-6">페이지를 찾을 수 없습니다.</div>} />

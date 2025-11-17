@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axios from '../../api/axiosInstance';
+import UserTrustPreview from '../../components/UserTrustPreview';
 
 const STYLE_COLOR = {
   '자연': 'bg-emerald-100 text-emerald-800',
@@ -15,13 +16,13 @@ const STYLE_COLOR = {
 };
 
 const API_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
   process.env.REACT_APP_API_BASE_URL ||
-  "http://localhost:4000";
+  'http://localhost:4000';
 
 const toAbs = (u) => {
-  if (!u) return "";
-  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, "")}${u}`;
+  if (!u) return '';
+  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, '')}${u}`;
 };
 
 function formatDateRange(start, end) {
@@ -61,7 +62,9 @@ export default function MateDetail() {
         if (u.status === 'fulfilled') setMe(u.value.data);
       } catch {}
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [id]);
 
   const mine = me && post && me.id === post.writer_id;
@@ -87,30 +90,40 @@ export default function MateDetail() {
     }
   };
 
-  if (!post) return <div className="p-6">불러오는 중...</div>;
+  if (!post) return <div className="p-6">불러오는 중.</div>;
 
   return (
     <div className="bg-gray-50">
-      {/* ⬇️ 폭을 현재의 2/3 수준으로 축소 */}
-      <div className="mx-auto max-w-[620px] px-6 pt-10 pb-20">
+      {/* 전체 폭: 조금 더 넓게 */}
+      <div className="mx-auto max-w-[750px] px-6 pt-10 pb-20">
+
+        {/* 목록으로 버튼 (카드 바깥, 상단) */}
+        <div className="mb-4">
+          <button
+            onClick={() => navigate('/mate')}
+            className="inline-flex items-center gap-1 text-[13px] text-slate-500 hover:text-slate-700"
+          >
+            <span className="text-[15px]">◀</span>
+            <span>목록으로</span>
+          </button>
+        </div>
+
         {/* 브레드크럼 */}
-        <div className="mb-4 text-[13px] text-slate-500">
-          <Link to="/mate" className="hover:underline">메이트 찾기</Link>
+        <div className="mb-2 text-[13px] text-slate-500">
+          <Link to="/mate" className="hover:underline">
+            메이트 찾기
+          </Link>
           <span className="mx-2">›</span>
           <span className="text-slate-700">게시글 상세</span>
         </div>
 
+        
+
         {/* 카드 */}
         <article className="rounded-2xl border border-slate-200 bg-white shadow-[0_6px_24px_rgba(0,0,0,0.06)]">
-          {/* 상단 뒤로가기 + 삭제 */}
+          {/* 상단: (삭제 버튼만) */}
           <div className="px-6 pt-6">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => navigate(-1)}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-600 hover:bg-slate-50"
-              >
-                <span className="text-slate-500">‹</span> 뒤로가기
-              </button>
+            <div className="flex items-center justify-end">
               {mine && (
                 <button
                   onClick={handleDelete}
@@ -124,15 +137,16 @@ export default function MateDetail() {
           </div>
 
           {/* 제목 */}
-          <header className="px-6 pt-4">
+          <header className="px-6 pt-2">
             <h1 className="text-[26px] sm:text-[28px] font-semibold tracking-tight text-slate-900">
               {post.title}
             </h1>
           </header>
 
-          {/* 메타 */}
+          {/* 메타 + 내용 */}
           <section className="px-6 pt-3">
-            <div className="text-[13px] text-slate-500 mb-3">
+            {/* 날짜 */}
+            <div className="mb-3 text-[13px] text-slate-500">
               <div className="flex items-center gap-2">
                 <span className="text-slate-400">🗓</span>
                 <span>{formatDateRange(post.start_date, post.end_date)}</span>
@@ -144,46 +158,41 @@ export default function MateDetail() {
               {styles.map((s, i) => (
                 <span
                   key={`${s}-${i}`}
-                  className={`px-3 py-1 rounded-full text-[12px] font-medium ${STYLE_COLOR[s] || 'bg-slate-100 text-slate-800'}`}
+                  className={`px-3 py-1 rounded-full text-[12px] font-medium ${
+                    STYLE_COLOR[s] || 'bg-slate-100 text-slate-800'
+                  }`}
                 >
                   {s}
                 </span>
               ))}
             </div>
 
-            {/* 본문: ⬇️ 짧아도 아래 여백을 충분히 주고, 그 다음 라인이 보이도록 */}
-            <div className="mt-4 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-800 min-h-[180px] pb-10">
+            {/* 본문 */}
+            <div className="mt-4 min-h-[180px] whitespace-pre-wrap pb-10 text-[15px] leading-relaxed text-slate-800">
               {post.content}
             </div>
           </section>
 
-          {/* ⬇️ 구분 라인 */}
+          {/* 구분 라인 */}
           <div className="border-t border-slate-200" />
 
-          {/* 하단 */}
-          <footer className="px-6 py-5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src={toAbs(post.avatarUrl) || '/assets/avatar_placeholder.png'}
-                alt="작성자"
-                className="w-9 h-9 rounded-full object-cover border border-white shadow"
+          {/* 하단: 신뢰 정보 + 채팅 버튼 */}
+          <footer className="px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between">
+            {/* 신뢰 정보 카드 */}
+            <div className="flex-1">
+              <UserTrustPreview
+                className="w-full"
+                userId={post.writer_id}
+                nickname={post.nickname}
+                avatarUrl={toAbs(post.avatarUrl)}
+                joinedAt={post.writer_joined_at}
+                travelCount={post.writer_travel_count}
               />
-              <div className="flex flex-col">
-                <div className="text-[14px] text-slate-800 font-medium">
-                  {post.nickname || '익명'}
-                </div>
-                <div className="text-[12px] text-slate-500">
-                  {post.writer_joined_at ? `가입일 ${String(post.writer_joined_at).slice(0, 7)}` : ''}
-                  {typeof post.writer_travel_count === 'number'
-                    ? `${post.writer_joined_at ? ' · ' : ''}여행 ${post.writer_travel_count}회`
-                    : ''}
-                </div>
-              </div>
             </div>
 
-            {/* CTA: bg-green-600 유지 */}
+            {/* 채팅 시작하기 버튼 */}
             <button
-              className="rounded-full bg-green-600 px-6 py-3 text-sm font-medium text-white shadow-md hover:bg-green-700"
+              className="w-full sm:w-[190px] rounded-full bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-green-700"
               onClick={async () => {
                 try {
                   const r = await axios.post('/api/chats/rooms', {

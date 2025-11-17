@@ -20,7 +20,7 @@ export default function ReportModal({ targetUserId, context='chat', refId=null }
   const [detail, setDetail] = useState('');
 
   const submit = async () => {
-    await axios.post('/reports', {
+    await axios.post('/api/reports', {
       target_user_id: targetUserId,
       context, reason, ref_id: refId || undefined, detail: detail || undefined
     });

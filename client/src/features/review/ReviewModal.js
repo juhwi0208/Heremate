@@ -20,7 +20,7 @@ export default function ReviewModal({ targetId, tripId, onSaved }) {
       tags: tags ? tags.split(',').map(s=>s.trim()).filter(Boolean) : [],
       comment: comment || undefined
     };
-    await axios.post('/reviews', body);
+    await axios.post('/api/reviews', body);
     setOpen(false);
     onSaved && onSaved();
   };

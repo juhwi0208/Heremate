@@ -2,7 +2,8 @@
 const db = require('../db');
 
 exports.searchMates = async (req, res) => {
-  const { location, style } = req.query;
+  const { location, style, me } = req.query;
+  // me = 내가 작성한 글만 보고 싶을 때: /api/mates?me=1
 
   let sql = 'SELECT * FROM posts WHERE 1=1';
   const params = [];
@@ -15,6 +16,12 @@ exports.searchMates = async (req, res) => {
   if (style) {
     sql += ' AND travel_style LIKE ?';
     params.push(`%${style}%`);
+  }
+
+  // ⭐ me 필터: 내가 작성한 글만
+  if (me) {
+    sql += ' AND writer_id = ?';
+    params.push(req.user.id);
   }
 
   try {

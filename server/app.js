@@ -23,6 +23,8 @@ const plansRouter  = require('./routes/plans');
 const placesRouter = require('./routes/places');
 const userRouter   = require('./routes/user');
 const chatRouter   = require('./routes/chat');
+const storiesRouter = require('./routes/stories');
+const tripsRouter = require('./routes/trips');
 
 const app = express();
 
@@ -114,6 +116,8 @@ app.use('/api/places', placesRouter);
 app.use('/api/users', userRouter);
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/stories', storiesRouter);
+app.use('/api/trips', tripsRouter);
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Not Found' }));

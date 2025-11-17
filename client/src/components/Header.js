@@ -17,6 +17,7 @@ const Header = ({ user, setUser }) => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     setUser(null);
+    setDropdownOpen(false);
     navigate('/');
   };
 
@@ -58,7 +59,11 @@ const Header = ({ user, setUser }) => {
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-md z-10">
                 <button
-                  onClick={() => navigate('/mypage')}
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    navigate('/mypage');
+                  }}
+                  
                   className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
                 >
                   마이페이지

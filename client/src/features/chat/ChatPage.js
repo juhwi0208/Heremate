@@ -8,70 +8,87 @@ import ChatRoom from './ChatRoom';
 export default function ChatPage() {
   const navigate = useNavigate();
   const { id: routeId } = useParams();
+
   const [rooms, setRooms] = useState([]);
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [currentId, setCurrentId] = useState(routeId || null);
 
+  // URL이 바뀔 때마다 currentId 동기화
+  useEffect(() => {
+    setCurrentId(routeId || null);
+  }, [routeId]);
+
+  // 채팅방 목록 불러오기
   useEffect(() => {
     let alive = true;
-    (async () => {
+
+    const fetchRooms = async () => {
       try {
-        const { data } = await axios.get('/api/chats/rooms');
+        setRoomsLoading(true);
+        const res = await axios.get('/api/chats/rooms');
         if (!alive) return;
-        setRooms(Array.isArray(data) ? data : []);
-        setRoomsLoading(false);
-      } catch (e) {
+        setRooms(res.data || []);
+      } catch (err) {
         if (!alive) return;
-        console.error('채팅방 목록 로드 실패:', e);
-        setRooms([]);
-        setRoomsLoading(false);
+        console.error('채팅방 목록 로드 실패:', err);
+      } finally {
+        if (alive) setRoomsLoading(false);
       }
-    })();
-    return () => { alive = false; };
+    };
+
+    fetchRooms();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  useEffect(() => {
-    // /chat/:id 면 해당 방을 열고, /chat 면 우측 비우기
-    if (routeId !== currentId) {
-      setCurrentId(routeId || null);
-    }
-  }, [routeId, currentId]);
-
-  const onSelect = (id) => {
-    const next = String(id);
-    setCurrentId(next);
-    navigate(`/chat/${next}`, { replace: false });
+  // 사이드바에서 방 클릭했을 때
+  const handleSelectRoom = (id) => {
+    if (!id) return;
+    setCurrentId(id);
+    navigate(`/chat/${id}`);
   };
 
-  // 읽음 처리 후 사이드바 뱃지 0으로
+  // 읽음 처리 후 사이드바 뱃지 제거
   const handleRead = (roomId) => {
-    setRooms(prev => prev.map(r => String(r.id) === String(roomId) ? { ...r, unread_count: 0 } : r));
+    setRooms((prev) =>
+      prev.map((r) =>
+        Number(r.id) === Number(roomId) ? { ...r, unread_count: 0 } : r
+      )
+    );
   };
 
-  const currentRoomMeta = rooms.find(r => String(r.id) === String(currentId));
+  const currentIdNum = currentId ? Number(currentId) : null;
+  const currentRoomMeta = currentIdNum
+    ? rooms.find((r) => Number(r.id) === currentIdNum)
+    : null;
 
   return (
-    <div className="max-w-6xl mx-auto h-[78vh] mt-6 border rounded-xl overflow-hidden bg-white">
-      <div className="h-full grid grid-cols-[320px_1fr]">
-        <aside className="border-r bg-white">
-          <div className="px-4 py-3 border-b font-semibold">Chat</div>
+    <div className="max-w-6xl mx-auto px-4 py-4">
+      <div className="bg-white rounded-xl shadow-sm border flex h-[calc(100vh-6rem)] min-h-[520px]">
+        {/* 사이드바 */}
+        <aside className="w-[280px] border-r flex-shrink-0">
           <ChatSidebarList
             rooms={rooms}
             loading={roomsLoading}
-            selectedId={currentId}
-            onSelect={onSelect}
+            selectedId={currentIdNum}
+            onSelect={handleSelectRoom}
           />
         </aside>
-        <section className="h-full">
-          {currentId ? (
+
+        {/* 채팅방 영역 */}
+        <section className="flex-1 flex flex-col">
+          {currentIdNum ? (
             <ChatRoom
-              roomIdOverride={currentId}
+              key={currentIdNum}        // 다른 방으로 갈 때 강제 재마운트
+              roomIdOverride={currentIdNum}
               embed
               roomMeta={currentRoomMeta}
               onRead={handleRead}
             />
           ) : (
-            <div className="h-full flex items-center justify-center text-gray-500">
+            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
               왼쪽에서 채팅방을 선택하세요.
             </div>
           )}

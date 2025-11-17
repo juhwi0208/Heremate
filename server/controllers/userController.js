@@ -5,44 +5,6 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const db = require('../db');
 
-// GET /api/users/me  → kakaoId, created_at 포함
-exports.getMe = async (req, res) => {
-  const id = req.user.id;
-  try {
-    const conn = await db.getConnection();
-    const [rows] = await conn.query(
-       `SELECT id, email, nickname, role,
-               created_at AS created_at,
-               avatar_url, bio,
-               kakao_id, email_verified,
-               CASE WHEN password IS NULL OR password = '' THEN 0 ELSE 1 END AS has_password
-        FROM users
-        WHERE id = ?`,
-       [id]
-    );
-    conn.release();
-
-    if (!rows.length) return res.status(404).json({ error: '사용자 없음' });
-
-    const u = rows[0];
-
-    return res.json({
-      id: u.id,
-      email: u.email,
-      nickname: u.nickname,
-      role: u.role,
-      created_at: u.created_at,
-      avatarUrl: u.avatar_url || '',
-      bio: u.bio || '',
-      kakaoId: u.kakao_id || null,
-      emailVerified: !!u.email_verified,
-      has_password: u.has_password,
-    });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: '프로필 로드 실패' });
-  }
-};
 
 // PUT /api/users/me (multipart)  → 이메일 변경 지원
 // body: nickname?, bio?, email?, currentPassword?
@@ -264,6 +226,16 @@ exports.getTrust = async (req, res) => {
       }
     } catch {}
 
+    // 전체 리뷰 개수
+    const [[reviewRow]] = await conn.query(
+      `SELECT COUNT(*) AS cnt FROM reviews WHERE target_id=?`,
+      [id]
+    );
+    const reviewCount = Number(reviewRow.cnt || 0);
+
+    // 긍정 비율 (positive_ratio는 0~1이므로 %로 변환)
+    const positivePercent = Math.round((summary.positive_ratio || 0) * 100);
+
     // 상위 키워드(간단 집계)
     const [tagsRows] = await conn.query(
       `SELECT tags FROM reviews WHERE target_id=? AND tags IS NOT NULL LIMIT 200`,
@@ -312,6 +284,8 @@ exports.getTrust = async (req, res) => {
         positiveRatio: summary.positive_ratio,
       },
       topTags,
+      reviewCount,           
+      positivePercent 
     });
   } catch (e) {
     try { conn.release(); } catch {}
