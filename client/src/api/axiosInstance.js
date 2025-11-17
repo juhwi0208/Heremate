@@ -17,13 +17,19 @@ const DEV_BASE =
   process.env.REACT_APP_API_BASE_URL ||   // ✅ CRA 기본 키도 허용
   'http://localhost:4000';
 
-const API_BASE = (process.env.NODE_ENV === 'production' ? (PROD_BASE || process.env.REACT_APP_API_BASE_URL) : DEV_BASE)
-  .replace(/\/$/, ''); // 끝 슬래시 제거
+  // 🟢 프론트/백엔드 공통으로 쓸 API_BASE export
+  export const API_BASE =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+    process.env.REACT_APP_API_BASE_URL ||
+    // 로컬에서는 4000, 배포에서는 same-origin(리라이트 쓰는 경우)으로
+    (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      ? 'http://localhost:4000'
+      : '/');
 
-const axios = axiosBase.create({
-  baseURL: API_BASE,
-  withCredentials: true,
-});
+  const axios = axiosBase.create({
+    baseURL: API_BASE.replace(/\/$/, ''), // 끝 / 제거
+    withCredentials: true,
+  });
 
  const bootToken = localStorage.getItem('token');
  if (bootToken) {

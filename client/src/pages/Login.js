@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
-import axios from '../api/axiosInstance';
+import axios, { API_BASE } from '../api/axiosInstance';
 import { Eye, EyeOff } from "lucide-react"; // 🟢 Added
 
 export default function Login({ setUser }) {
@@ -43,14 +43,11 @@ export default function Login({ setUser }) {
     }
   };
 
- const handleKakaoLogin = () => {
-  const API_BASE =
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
-    process.env.REACT_APP_API_BASE_URL ||
-    'http://localhost:4000';
-  // (선택) 명시: mode=login
-  window.location.href = `${API_BASE.replace(/\/$/, '')}/auth/kakao/start?mode=login`;
-};
+  const handleKakaoLogin = () => {
+    // 🟢 백엔드 도메인으로 바로 인가 시작
+    window.location.href = `${API_BASE.replace(/\/$/, '')}/auth/kakao/start?mode=login`;
+  };
+  
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100 px-4">
       <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md">
