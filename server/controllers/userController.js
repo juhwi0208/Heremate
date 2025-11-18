@@ -154,42 +154,43 @@ exports.deleteMe = async (req, res) => {
 
 // GET /api/users/me  → kakaoId, created_at 포함 + 신뢰 캐시
 exports.getMe = async (req, res) => {
-  const id = req.user.id;
+  const id = req.user && req.user.id;
+  if (!id) {
+    // 토큰은 있는데 파싱이 안됐을 때 방어 코드
+    return res.status(401).json({ error: 'UNAUTHORIZED' });
+  }
+
+  let conn;
   try {
-    const conn = await db.getConnection();
+    conn = await db.getConnection();
+
     const [rows] = await conn.query(
-       `SELECT id, email, nickname, role,
-               created_at AS created_at,
-               avatar_url, bio,
-               kakao_id, email_verified,
-               aura_tone, aura_intensity, aura_score, constellation_score,
-               CASE WHEN password IS NULL OR password = '' THEN 0 ELSE 1 END AS has_password
-        FROM users
-        WHERE id = ?`,
-       [id]
+      `
+      SELECT
+        id,
+        email,
+        nickname,
+        role,
+        avatar_url,
+        bio,
+        created_at
+      FROM users
+      WHERE id = ?
+      `,
+      [id]
     );
-    conn.release();
 
-    if (!rows.length) return res.status(404).json({ error: '사용자 없음' });
-    const u = rows[0];
+    if (!rows[0]) {
+      return res.status(404).json({ error: 'USER_NOT_FOUND' });
+    }
 
-    return res.json({
-      id: u.id,
-      email: u.email,
-      nickname: u.nickname,
-      role: u.role,
-      created_at: u.created_at,
-      avatarUrl: u.avatar_url || '',
-      bio: u.bio || '',
-      kakaoId: u.kakao_id || null,
-      emailVerified: !!u.email_verified,
-      has_password: u.has_password,
-      aura: { tone: u.aura_tone, intensity: u.aura_intensity, score: u.aura_score },
-      constellation: { score: u.constellation_score },
-    });
+    // 클라이언트에서 그대로 쓰기 편하게 내려줌
+    return res.json(rows[0]);
   } catch (e) {
-    console.error(e);
+    console.error('[/api/users/me] DB error:', e);
     return res.status(500).json({ error: '프로필 로드 실패' });
+  } finally {
+    if (conn) conn.release();
   }
 };
 
