@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const helmet = require('helmet');
 const morgan = require('morgan');
 
+
 // 1) 환경 로딩: B단계 로더 사용 (.env.dev / .env.prod)
 require('./config/env');
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -52,7 +53,13 @@ app.use((req, res, next) => {
 
 // 보안 헤더 / 리버스 프록시 신뢰 / 요청 로깅
 app.set('trust proxy', 1);
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    // 여기 추가된 부분 때문에 이미지처럼 static 리소스를 다른 오리진(3000 → 4000)에서도 쓸 수 있게 됨
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 app.use(morgan(NODE_ENV === 'production' ? 'tiny' : 'dev'));
 
 // CORS: CLIENT_ORIGIN + ALLOWED_ORIGINS(콤마) 지원

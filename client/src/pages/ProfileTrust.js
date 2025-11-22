@@ -17,6 +17,17 @@ import ReviewModal from '../features/review/ReviewModal';
 import ReportModal from '../features/report/ReportModal';
 import { Camera, Lock, ChevronRight } from 'lucide-react';
 
+const API_BASE =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+  process.env.REACT_APP_API_BASE_URL ||
+  'http://localhost:4000';
+
+const resolveAvatarUrl = (path) => {
+  if (!path) return '';
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE.replace(/\/$/, '')}${path}`;
+};
+
 /* 공용 RowItem (MyPage에서 가져옴) */
 function RowItem({ title, desc, actionLabel, onAction, disabled, titleAttr }) {
   return (
@@ -92,7 +103,7 @@ function auraRingStyle(aura) {
 }
 /* ------------------ 메인 컴포넌트 ------------------ */
 
-export default function ProfileTrust() {
+export default function ProfileTrust({ setUser }) {
   const params = useParams();
   const navigate = useNavigate();
 
@@ -218,7 +229,7 @@ export default function ProfileTrust() {
         joinedAt: meData?.created_at || meData?.joinedAt || p.joinedAt,
         role: meData?.role ?? p.role,
         bio: meData?.bio ?? '',
-        avatarUrl: meData?.avatarUrl ?? '',
+        avatarUrl: resolveAvatarUrl(meData?.avatarUrl) ?? '',
         kakaoId: meData?.kakaoId ?? null,
         emailVerified: !!meData?.emailVerified,
         hasPassword:
@@ -308,19 +319,41 @@ export default function ProfileTrust() {
         const form = new FormData();
         form.append('nickname', profile.nickname || '');
         form.append('bio', profile.bio || '');
-        if (fileRef.current?.files?.[0])
+        if (fileRef.current?.files?.[0]) {
           form.append('avatar', fileRef.current.files[0]);
+        }
 
         const { data } = await axios.put('/api/users/me', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        const newUrl = data?.avatarUrl || avatarPreview;
-        if (newUrl)
+
+        // ✅ 서버에서 내려준 avatarUrl / nickname 사용
+        const newUrl = resolveAvatarUrl(data?.avatarUrl) || avatarPreview;
+        const newNick = data?.nickname || profile.nickname;
+
+        if (newUrl) {
           setProfile((p) => ({
             ...p,
             avatarUrl: newUrl,
           }));
-        originalNickRef.current = profile.nickname;
+        }
+        if (newNick) {
+          setProfile((p) => ({
+            ...p,
+            nickname: newNick,
+          }));
+          originalNickRef.current = newNick;
+        }
+
+        // ✅ 헤더 오른쪽 user도 함께 업데이트
+        if (typeof setUser === 'function') {
+          setUser((u) => ({
+            ...u,
+            nickname: newNick || u?.nickname,
+            avatarUrl: newUrl || u?.avatarUrl,
+          }));
+        }
+
         alert('프로필이 저장되었습니다.');
       } catch (err) {
         console.error(err);
@@ -329,8 +362,9 @@ export default function ProfileTrust() {
         setSaving(false);
       }
     },
-    [saving, nickState, profile, avatarPreview]
+    [saving, nickState, profile, avatarPreview, setUser]
   );
+
 
   /* ------------------ 카카오 연동 / 회원탈퇴 ------------------ */
 
@@ -437,8 +471,9 @@ export default function ProfileTrust() {
                           ? avatarPreview ||
                             profile.avatarUrl ||
                             '/assets/avatar_placeholder.png'
-                          : targetUser.avatarUrl ||
-                            '/assets/avatar_placeholder.png'
+                          : targetUser.avatarUrl
+                            ? resolveAvatarUrl(targetUser.avatarUrl)
+                            :'/assets/avatar_placeholder.png'
                       }
                       alt="avatar"
                       className="w-full h-full object-cover"
@@ -753,17 +788,28 @@ function StoriesSection({ onCountChange }) {
           className="group overflow-hidden rounded-2xl border bg-white shadow-sm"
         >
           <div className="aspect-[4/3] w-full bg-zinc-100">
-            {s.cover_url ? (
-              <img
-                src={s.cover_url}
-                alt={s.title}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
-                No Image
-              </div>
-            )}
+            {(() => {
+              const cover =
+                s.cover_url ||
+                s.coverUrl ||
+                s.thumbnail ||
+                s.thumbnail_url ||
+                s.image ||
+                s.image_url ||
+                '';
+              return cover ? (
+                <img
+                  src={cover}
+                  alt={s.title}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
+                  No Image
+                </div>
+              );
+            })()}
+
           </div>
           <div className="p-4">
             <div className="line-clamp-1 text-sm font-medium text-zinc-900">

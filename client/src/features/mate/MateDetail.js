@@ -48,6 +48,7 @@ export default function MateDetail() {
 
   const [post, setPost] = useState(null);
   const [me, setMe] = useState(null);
+  
 
   useEffect(() => {
     let mounted = true;
@@ -176,10 +177,10 @@ export default function MateDetail() {
           {/* 구분 라인 */}
           <div className="border-t border-slate-200" />
 
-          {/* 하단: 신뢰 정보 + 채팅 버튼 */}
-          <footer className="px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-stretch sm:justify-between">
-            {/* 신뢰 정보 카드 */}
-            <div className="flex-1">
+           {/* 하단: 신뢰 정보 + 채팅 버튼 */}
+          <footer className="px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* 신뢰 정보 카드 (요약 카드 느낌으로, 너무 넓지 않게) */}
+            <div className="flex-1 max-w-[540px]">   
               <UserTrustPreview
                 className="w-full"
                 userId={post.writer_id}
@@ -190,24 +191,41 @@ export default function MateDetail() {
               />
             </div>
 
-            {/* 채팅 시작하기 버튼 */}
-            <button
-              className="w-full sm:w-[190px] rounded-full bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-green-700"
-              onClick={async () => {
-                try {
-                  const r = await axios.post('/api/chats/rooms', {
-                    targetUserId: post.writer_id,
-                    postId: post.id,
-                  });
-                  const roomId = r?.data?.roomId;
-                  if (roomId) navigate(`/chat/${roomId}`);
-                } catch {
-                  alert('채팅방 생성 실패: 로그인 상태를 확인해주세요.');
-                }
-              }}
-            >
-              💬 채팅 시작하기
-            </button>
+            {/* 채팅 시작하기 버튼 - 내 글이면 비활성화 */}
+            <div className="sm:self-center flex flex-col items-center gap-1">
+              <button
+                disabled={mine}
+                className={`rounded-full px-4 py-3.5 text-sm font-semibold shadow-md whitespace-nowrap
+                  ${
+                    mine
+                      ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                      : 'bg-green-600 text-white hover:bg-green-700'
+                  }`}
+                onClick={async () => {
+                  // 내가 작성한 글이면 버튼은 눌러도 아무 동작 안 함
+                  if (mine) return;
+
+                  try {
+                    const r = await axios.post('/api/chats/rooms', {
+                      targetUserId: post.writer_id,
+                      postId: post.id,
+                    });
+                    const roomId = r?.data?.roomId;
+                    if (roomId) navigate(`/chat/${roomId}`);
+                  } catch {
+                    alert('채팅방 생성 실패: 로그인 상태를 확인해주세요.');
+                  }
+                }}
+              >
+                💬 채팅 시작하기
+              </button>
+
+              {mine && (
+                <p className="mt-1 text-[12px] text-gray-500">
+                  내가 작성한 게시글이에요!
+                </p>
+              )}
+            </div>
           </footer>
         </article>
       </div>

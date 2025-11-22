@@ -5,6 +5,7 @@ import CountryCitySelect, { countryCityToLocation } from '../../components/Count
 import axios from '../../api/axiosInstance';
 
 const ALL_STYLES = ['자연','맛집','사진','쇼핑','예술','역사','체험','축제','휴식'];
+
 const API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
   process.env.REACT_APP_API_BASE_URL ||
@@ -45,6 +46,17 @@ function formatRange(s, e) {
   const E = (e || '').slice(0,10);
   if (!S || !E) return `${S} ~ ${E}`;
   return `${S.replace(/-/g, '.')} - ${E.slice(5).replace('-', '.')}`;
+}
+
+// travel_style 문자열/배열을 공통 배열로 파싱
+function parseStyles(p) {
+  const raw = p.travel_styles ?? p.travel_style;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 export default function MateList() {
@@ -96,10 +108,17 @@ export default function MateList() {
     return arr;
   }, [posts, sort]);
 
+  const resetFilters = () => {
+    setRegionFilter(null);
+    setStyles([]);
+    setStartDate('');
+    setEndDate('');
+  };
+
   return (
     <div className="bg-slate-50">
       <div className="mx-auto max-w-[1200px] px-6 pt-8 pb-16">
-        {/* 헤더 — 우측 상단에 새 글 버튼 배치 (필터 밖 + 더 위) */}
+        {/* 헤더 — 우측 상단에 새 글 버튼 */}
         <header className="mb-6 flex items-start md:items-center justify-between gap-3">
           <div>
             <h1 className="text-[24px] leading-[30px] font-medium tracking-normal text-slate-900">
@@ -117,89 +136,93 @@ export default function MateList() {
           </button>
         </header>
 
-        {/* 필터 (버튼은 헤더로 이동, 여기선 유지 X) */}
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] px-4 py-3 mb-10">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-[13px] text-slate-700">지역</label>
-            <CountryCitySelect
-              value={regionFilter}
-              onChange={setRegionFilter}
-              compact
-            />
+        {/* ✅ PlanFilters와 동일한 스타일의 필터 박스 */}
+        <section className="mb-8">
+          <div className="bg-white rounded-2xl shadow p-3 border hover:shadow-md transition">
+            <div className="grid grid-cols-12 gap-2 items-center">
+              {/* 여행 지역 (CountryCitySelect) - 4칸 */}
+              <div className="col-span-4">
+                <label className="block text-xs text-zinc-600 mb-1">여행 지역</label>
+                <CountryCitySelect
+                  value={regionFilter}
+                  onChange={setRegionFilter}
+                  compact
+                />
+              </div>
 
-            <label className="ml-2 text-[13px] text-slate-700">시작</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-9 px-3 rounded-lg border border-slate-300 text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-green-600"
-            />
-            <label className="ml-2 text-[13px] text-slate-700">종료</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="h-9 px-3 rounded-lg border border-slate-300 text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-green-600"
-            />
+              {/* 시작일 - 2칸 */}
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-600 mb-1">시작일</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full border rounded-xl px-2 h-8 text-xs focus:ring-2 focus:ring-green-600 outline-none"
+                />
+              </div>
 
-            {/* 취향 다중 드롭다운 */}
-            <div ref={styleRef} className="relative">
-              <label className="ml-2 text-[13px] text-slate-700">취향</label>
-              <button
-                type="button"
-                onClick={() => setOpenStyle(v => !v)}
-                className="ml-2 h-9 px-3 rounded-lg border border-slate-300 text-[13px] bg-white"
-                aria-haspopup="listbox"
-                aria-expanded={openStyle}
-              >
-                {styles.length ? `선택됨 ${styles.length}` : '전체 취향'}
-                <span className="ml-1">▼</span>
-              </button>
+              {/* 종료일 - 2칸 */}
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-600 mb-1">종료일</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full border rounded-xl px-2 h-8 text-xs focus:ring-2 focus:ring-green-600 outline-none"
+                />
+              </div>
 
-              {openStyle && (
-                <div className="absolute z-10 mt-2 w-56 rounded-lg border border-slate-200 bg-white shadow-lg p-2" role="listbox">
-                  <button
-                    type="button"
-                    className="w-full text-left text-[13px] px-2 py-1 rounded hover:bg-slate-50"
-                    onClick={() => setStyles([])}
-                  >
-                    전체 취향
-                  </button>
-                  <div className="max-h-44 overflow-auto mt-1 pr-1">
-                    {ALL_STYLES.map(s => {
-                      const on = styles.includes(s);
-                      return (
-                        <label key={s} className="flex items-center gap-2 px-2 py-1 text-[13px] rounded hover:bg-slate-50">
-                          <input
-                            type="checkbox"
-                            checked={on}
-                            onChange={() => setStyles(prev => on ? prev.filter(v => v !== s) : [...prev, s])}
-                          />
-                          <span>{s}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+              {/* 여행 취향 - 3칸 (PlanFilters 스타일) */}
+              <div className="col-span-3" ref={styleRef}>
+                <label className="block text-xs text-zinc-600 mb-1">여행 취향</label>
+                <div className="flex gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
+                  {ALL_STYLES.map((s) => {
+                    const on = styles.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        onClick={() =>
+                          setStyles((prev) =>
+                            on ? prev.filter((v) => v !== s) : [...prev, s]
+                          )
+                        }
+                        type="button"
+                        className={`px-3 h-8 text-xs rounded-full border transition ${
+                          on
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white hover:bg-zinc-50'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* 정렬 */}
-            <div className="ml-auto flex items-center gap-2">
-              <label className="text-[13px] text-slate-700">정렬</label>
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-                className="h-9 px-3 rounded-lg border border-slate-300 text-[13px] bg-white"
-              >
-                <option value="latest">최신 등록 순</option>
-                <option value="travel_date">여행 날짜 순</option>
-              </select>
+              {/* 초기화 + 정렬 - 1칸 (세로 스택) */}
+              <div className="col-span-1 flex flex-col gap-1 items-stretch justify-end">
+                <button
+                  onClick={resetFilters}
+                  type="button"
+                  className="w-full h-8 px-3 rounded-xl border text-zinc-700 hover:bg-zinc-50 text-xs"
+                >
+                  초기화
+                </button>
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                  className="w-full h-8 px-2 rounded-xl border text-xs text-zinc-700 bg-white focus:ring-2 focus:ring-green-600 outline-none"
+                >
+                  <option value="latest">최신 등록</option>
+                  <option value="travel_date">여행 날짜</option>
+                </select>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* 카드 그리드 — 균일 높이 */}
+        {/* 카드 그리드 */}
         <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-fr">
           {sortedPosts.map((p) => (
             <article
@@ -223,7 +246,9 @@ export default function MateList() {
                 <span className="inline-flex items-center gap-1 px-3 py-[6px] rounded-full text-[13px] font-medium bg-emerald-100 text-emerald-800">
                   <span>📍</span> {p.location || '지역 미정'}
                 </span>
-                {(p.travel_styles || []).map((s, i) => <TagChip key={i} label={s} />)}
+                {parseStyles(p).map((s, i) => (
+                  <TagChip key={i} label={s} />
+                ))}
               </div>
 
               <p
@@ -238,7 +263,7 @@ export default function MateList() {
               <div className="mt-auto border-t border-slate-100 pt-4">
                 <div className="flex items-center gap-3">
                   <img
-                    src={toAbs(p.avatarUrl) || '/assets/avatar_placeholder.png'}
+                    src={toAbs(p.avatarUrl || p.avatar_url) || '/assets/avatar_placeholder.png'}
                     alt=""
                     className="w-9 h-9 rounded-full object-cover border border-white shadow"
                   />

@@ -1,9 +1,5 @@
-// HereMate - TravelRegions (나라 → 도시)
-// 한국인 많이 가는 여행지 + 좌표(lat/lng) 추가 버전
-// 좌표는 대표 도심/공항 기준 대략값이며, 없는 도시는 국가 중심 좌표로 넣었음.
-
 const TravelRegions = [
-  // 1. 🇬🇷 그리스
+  // 🇬🇷 그리스
   {
     code: "GR",
     name: { ko: "그리스", en: "Greece" },
@@ -15,18 +11,41 @@ const TravelRegions = [
     ]
   },
 
-  // 2. 🇿🇦 남아프리카공화국
+  // 🇿🇦 남아프리카공화국
   {
     code: "ZA",
     name: { ko: "남아프리카공화국", en: "South Africa" },
     cities: [
       { ko: "케이프타운", en: "Cape Town", lat: -33.9249, lng: 18.4241 },
-      { ko: "요하네스버그", en: "Johannesburg", lat: -26.2041, lng: 28.0473 },
-      { ko: "크루거 국립공원", en: "Kruger National Park", lat: -23.9884, lng: 31.5547 }
+      { ko: "요하네스버그", en: "Johannesburg", lat: -26.2041, lng: 28.0473 }
     ]
   },
 
-  // 3. 🇹🇼 대만
+  // 🇳🇱 네덜란드
+  {
+    code: "NL",
+    name: { ko: "네덜란드", en: "Netherlands" },
+    cities: [
+      { ko: "암스테르담", en: "Amsterdam", lat: 52.3676, lng: 4.9041 },
+      { ko: "로테르담", en: "Rotterdam", lat: 51.9244, lng: 4.4777 },
+      { ko: "헤이그(덴하흐)", en: "The Hague", lat: 52.0705, lng: 4.3007 },
+      { ko: "위트레흐트", en: "Utrecht", lat: 52.0907, lng: 5.1214 },
+      { ko: "히트호른", en: "Giethoorn", lat: 52.7372, lng: 6.0815 }
+    ]
+  },
+
+  // 🇳🇿 뉴질랜드
+  {
+    code: "NZ",
+    name: { ko: "뉴질랜드", en: "New Zealand" },
+    cities: [
+      { ko: "오클랜드", en: "Auckland", lat: -36.8485, lng: 174.7633 },
+      { ko: "퀸스타운", en: "Queenstown", lat: -45.0312, lng: 168.6626 },
+      { ko: "크라이스트처치", en: "Christchurch", lat: -43.5321, lng: 172.6362 }
+    ]
+  },
+
+  // 🇹🇼 대만
   {
     code: "TW",
     name: { ko: "대만", en: "Taiwan" },
@@ -41,7 +60,7 @@ const TravelRegions = [
     ]
   },
 
-  // 4. 🇰🇷 대한민국
+  // 🇰🇷 대한민국
   {
     code: "KR",
     name: { ko: "대한민국", en: "Korea, Republic of" },
@@ -59,7 +78,16 @@ const TravelRegions = [
     ]
   },
 
-  // 5. 🇩🇪 독일
+  // 🇩🇰 덴마크
+  {
+    code: "DK",
+    name: { ko: "덴마크", en: "Denmark" },
+    cities: [
+      { ko: "코펜하겐", en: "Copenhagen", lat: 55.6761, lng: 12.5683 }
+    ]
+  },
+
+  // 🇩🇪 독일
   {
     code: "DE",
     name: { ko: "독일", en: "Germany" },
@@ -73,7 +101,7 @@ const TravelRegions = [
     ]
   },
 
-  // 6. 🇷🇺 러시아
+  // 🇷🇺 러시아
   {
     code: "RU",
     name: { ko: "러시아", en: "Russia" },
@@ -85,7 +113,16 @@ const TravelRegions = [
     ]
   },
 
-  // 7. 🇲🇾 말레이시아
+  // 🇱🇺 룩셈부르크
+  {
+    code: "LU",
+    name: { ko: "룩셈부르크", en: "Luxembourg" },
+    cities: [
+      { ko: "룩셈부르크시", en: "Luxembourg City", lat: 49.6116, lng: 6.1319 }
+    ]
+  },
+
+  // 🇲🇾 말레이시아
   {
     code: "MY",
     name: { ko: "말레이시아", en: "Malaysia" },
@@ -98,18 +135,38 @@ const TravelRegions = [
     ]
   },
 
-  // 8. 🇲🇳 몽골
+  // 🇲🇳 몽골
   {
     code: "MN",
     name: { ko: "몽골", en: "Mongolia" },
     cities: [
       { ko: "울란바토르", en: "Ulaanbaatar", lat: 47.8864, lng: 106.9057 },
-      { ko: "홉스골호", en: "Khövsgöl Lake", lat: 50.5500, lng: 100.2000 },
       { ko: "테를지 국립공원", en: "Terelj National Park", lat: 47.9890, lng: 107.6060 }
     ]
   },
 
-  // 9. 🇺🇸 미국
+  // 🇲🇻 몰디브
+  {
+    code: "MV",
+    name: { ko: "몰디브", en: "Maldives" },
+    cities: [
+      { ko: "말레", en: "Malé", lat: 4.1755, lng: 73.5093 },
+      { ko: "마푸시", en: "Maafushi", lat: 3.9423, lng: 73.4889 }
+    ]
+  },
+
+  // 🇲🇦 모로코
+  {
+    code: "MA",
+    name: { ko: "모로코", en: "Morocco" },
+    cities: [
+      { ko: "마라케시", en: "Marrakech", lat: 31.6295, lng: -7.9811 },
+      { ko: "카사블랑카", en: "Casablanca", lat: 33.5731, lng: -7.5898 },
+      { ko: "쉐프샤우엔", en: "Chefchaouen", lat: 35.1718, lng: -5.2697 }
+    ]
+  },
+
+  // 🇺🇸 미국
   {
     code: "US",
     name: { ko: "미국", en: "United States" },
@@ -125,25 +182,13 @@ const TravelRegions = [
       { ko: "마이애미", en: "Miami", lat: 25.7617, lng: -80.1918 },
       { ko: "올랜도", en: "Orlando", lat: 28.5383, lng: -81.3792 },
       { ko: "시애틀", en: "Seattle", lat: 47.6062, lng: -122.3321 },
-      { ko: "포틀랜드", en: "Portland", lat: 45.5152, lng: -122.6784 },
-      { ko: "샌디에이고", en: "San Diego", lat: 32.7157, lng: -117.1611 },
-      { ko: "댈러스", en: "Dallas", lat: 32.7767, lng: -96.7970 },
-      { ko: "휴스턴", en: "Houston", lat: 29.7604, lng: -95.3698 },
-      { ko: "뉴올리언스", en: "New Orleans", lat: 29.9511, lng: -90.0715 },
-      { ko: "애틀랜타", en: "Atlanta", lat: 33.7490, lng: -84.3880 },
-      { ko: "오스틴", en: "Austin", lat: 30.2672, lng: -97.7431 },
-      { ko: "필라델피아", en: "Philadelphia", lat: 39.9526, lng: -75.1652 },
-      { ko: "덴버", en: "Denver", lat: 39.7392, lng: -104.9903 },
-      { ko: "피닉스", en: "Phoenix", lat: 33.4484, lng: -112.0740 },
-      { ko: "솔트레이크시티", en: "Salt Lake City", lat: 40.7608, lng: -111.8910 },
-      { ko: "샬럿", en: "Charlotte", lat: 35.2271, lng: -80.8431 },
-      { ko: "내슈빌", en: "Nashville", lat: 36.1627, lng: -86.7816 },
-      { ko: "디트로이트", en: "Detroit", lat: 42.3314, lng: -83.0458 },
-      { ko: "미니애폴리스", en: "Minneapolis", lat: 44.9778, lng: -93.2650 }
+      { ko: "샌타모니카", en: "Santa Monica", lat: 34.0195, lng: -118.4912 },
+      { ko: "요세미티 국립공원", en: "Yosemite National Park", lat: 37.8651, lng: -119.5383 },
+      { ko: "그랜드캐니언", en: "Grand Canyon", lat: 36.0544, lng: -112.1401 }
     ]
   },
 
-  // 10. 🇻🇳 베트남
+  // 🇻🇳 베트남
   {
     code: "VN",
     name: { ko: "베트남", en: "Vietnam" },
@@ -158,18 +203,36 @@ const TravelRegions = [
     ]
   },
 
-  // 11. 🇸🇦 사우디아라비아
+  // 🇧🇪 벨기에
+  {
+    code: "BE",
+    name: { ko: "벨기에", en: "Belgium" },
+    cities: [
+      { ko: "브뤼셀", en: "Brussels", lat: 50.8503, lng: 4.3517 },
+      { ko: "브뤼헤", en: "Bruges", lat: 51.2093, lng: 3.2247 }
+    ]
+  },
+
+  // 🇸🇦 사우디아라비아
   {
     code: "SA",
     name: { ko: "사우디아라비아", en: "Saudi Arabia" },
     cities: [
       { ko: "리야드", en: "Riyadh", lat: 24.7136, lng: 46.6753 },
-      { ko: "제다", en: "Jeddah", lat: 21.4858, lng: 39.1925 },
-      { ko: "알울라", en: "AlUla", lat: 26.6085, lng: 37.9231 }
+      { ko: "제다", en: "Jeddah", lat: 21.4858, lng: 39.1925 }
     ]
   },
 
-  // 12. 🇪🇸 스페인
+  // 🇸🇪 스웨덴
+  {
+    code: "SE",
+    name: { ko: "스웨덴", en: "Sweden" },
+    cities: [
+      { ko: "스톡홀름", en: "Stockholm", lat: 59.3293, lng: 18.0686 }
+    ]
+  },
+
+  // 🇪🇸 스페인
   {
     code: "ES",
     name: { ko: "스페인", en: "Spain" },
@@ -183,7 +246,7 @@ const TravelRegions = [
     ]
   },
 
-  // 13. 🇨🇭 스위스
+  // 🇨🇭 스위스
   {
     code: "CH",
     name: { ko: "스위스", en: "Switzerland" },
@@ -192,11 +255,13 @@ const TravelRegions = [
       { ko: "루체른", en: "Lucerne", lat: 47.0502, lng: 8.3093 },
       { ko: "인터라켄", en: "Interlaken", lat: 46.6863, lng: 7.8632 },
       { ko: "제네바", en: "Geneva", lat: 46.2044, lng: 6.1432 },
-      { ko: "체르마트", en: "Zermatt", lat: 46.0207, lng: 7.7491 }
+      { ko: "체르마트", en: "Zermatt", lat: 46.0207, lng: 7.7491 },
+      { ko: "그린델발트", en: "Grindelwald", lat: 46.6242, lng: 8.0370 },
+      { ko: "라우터브룬넨", en: "Lauterbrunnen", lat: 46.5934, lng: 7.9070 }
     ]
   },
 
-  // 14. 🇸🇬 싱가포르
+  // 🇸🇬 싱가포르
   {
     code: "SG",
     name: { ko: "싱가포르", en: "Singapore" },
@@ -205,7 +270,7 @@ const TravelRegions = [
     ]
   },
 
-  // 15. 🇦🇪 아랍에미리트
+  // 🇦🇪 아랍에미리트
   {
     code: "AE",
     name: { ko: "아랍에미리트", en: "United Arab Emirates" },
@@ -215,7 +280,25 @@ const TravelRegions = [
     ]
   },
 
-  // 16. 🇦🇹 오스트리아
+  // 🇮🇸 아이슬란드
+  {
+    code: "IS",
+    name: { ko: "아이슬란드", en: "Iceland" },
+    cities: [
+      { ko: "레이캬비크", en: "Reykjavik", lat: 64.1466, lng: -21.9426 }
+    ]
+  },
+
+  // 🇮🇪 아일랜드
+  {
+    code: "IE",
+    name: { ko: "아일랜드", en: "Ireland" },
+    cities: [
+      { ko: "더블린", en: "Dublin", lat: 53.3498, lng: -6.2603 }
+    ]
+  },
+
+  // 🇦🇹 오스트리아
   {
     code: "AT",
     name: { ko: "오스트리아", en: "Austria" },
@@ -226,18 +309,28 @@ const TravelRegions = [
     ]
   },
 
-  // 17. 🇺🇿 우즈베키스탄
+  // 🇺🇿 우즈베키스탄
   {
     code: "UZ",
     name: { ko: "우즈베키스탄", en: "Uzbekistan" },
     cities: [
       { ko: "타슈켄트", en: "Tashkent", lat: 41.2995, lng: 69.2401 },
-      { ko: "사마르칸트", en: "Samarkand", lat: 39.6542, lng: 66.9597 },
-      { ko: "부하라", en: "Bukhara", lat: 39.768, lng: 64.455 }
+      { ko: "사마르칸트", en: "Samarkand", lat: 39.6542, lng: 66.9597 }
     ]
   },
 
-  // 18. 🇪🇬 이집트
+  // 🇯🇴 요르단
+  {
+    code: "JO",
+    name: { ko: "요르단", en: "Jordan" },
+    cities: [
+      { ko: "암만", en: "Amman", lat: 31.9539, lng: 35.9106 },
+      { ko: "페트라", en: "Petra", lat: 30.3285, lng: 35.4444 },
+      { ko: "와디럼", en: "Wadi Rum", lat: 29.5328, lng: 35.4194 }
+    ]
+  },
+
+  // 🇪🇬 이집트
   {
     code: "EG",
     name: { ko: "이집트", en: "Egypt" },
@@ -249,7 +342,7 @@ const TravelRegions = [
     ]
   },
 
-  // 19. 🇮🇹 이탈리아
+  // 🇮🇹 이탈리아
   {
     code: "IT",
     name: { ko: "이탈리아", en: "Italy" },
@@ -263,7 +356,7 @@ const TravelRegions = [
     ]
   },
 
-  // 20. 🇮🇳 인도
+  // 🇮🇳 인도
   {
     code: "IN",
     name: { ko: "인도", en: "India" },
@@ -276,7 +369,7 @@ const TravelRegions = [
     ]
   },
 
-  // 21. 🇮🇩 인도네시아
+  // 🇮🇩 인도네시아
   {
     code: "ID",
     name: { ko: "인도네시아", en: "Indonesia" },
@@ -286,7 +379,7 @@ const TravelRegions = [
     ]
   },
 
-  // 22. 🇯🇵 일본
+  // 🇯🇵 일본
   {
     code: "JP",
     name: { ko: "일본", en: "Japan" },
@@ -295,7 +388,7 @@ const TravelRegions = [
       { ko: "오사카(간사이)", en: "Osaka (KIX)", lat: 34.6937, lng: 135.5023 },
       { ko: "교토", en: "Kyoto", lat: 35.0116, lng: 135.7681 },
       { ko: "후쿠오카", en: "Fukuoka", lat: 33.5902, lng: 130.4017 },
-      { ko: "삿포로(치토세)", en: "Sapporo (CTS)", lat: 43.0618, lng: 141.3545 },
+      { ko: "삿포로", en: "Sapporo (CTS)", lat: 43.0618, lng: 141.3545 },
       { ko: "오키나와(나하)", en: "Okinawa (Naha)", lat: 26.2124, lng: 127.6809 },
       { ko: "나고야", en: "Nagoya", lat: 35.1815, lng: 136.9066 },
       { ko: "히로시마", en: "Hiroshima", lat: 34.3853, lng: 132.4553 },
@@ -320,24 +413,32 @@ const TravelRegions = [
       { ko: "가마쿠라", en: "Kamakura", lat: 35.3192, lng: 139.5467 },
       { ko: "닛코", en: "Nikko", lat: 36.7190, lng: 139.6983 },
       { ko: "하코네", en: "Hakone", lat: 35.2324, lng: 139.1064 },
+
+      // 추가 도시들
       { ko: "가나자와(고마츠)", en: "Kanazawa (Komatsu)", lat: 36.5613, lng: 136.6562 },
       { ko: "도야마", en: "Toyama", lat: 36.6953, lng: 137.2113 },
-      { ko: "마쓰야마", en: "Matsuyama", lat: 33.8393, lng: 132.7657 }
+      { ko: "마쓰야마", en: "Matsuyama", lat: 33.8393, lng: 132.7657 },
+      { ko: "아사히카와", en: "Asahikawa", lat: 43.7706, lng: 142.3633 },
+      { ko: "아키타", en: "Akita", lat: 39.7200, lng: 140.1035 },
+      { ko: "오비히로", en: "Obihiro", lat: 42.9230, lng: 143.1960 }
     ]
   },
 
-  // 23. 🇯🇴 요르단
+  // 🇬🇧 영국
   {
-    code: "JO",
-    name: { ko: "요르단", en: "Jordan" },
+    code: "GB",
+    name: { ko: "영국", en: "United Kingdom" },
     cities: [
-      { ko: "암만", en: "Amman", lat: 31.9539, lng: 35.9106 },
-      { ko: "페트라", en: "Petra", lat: 30.3285, lng: 35.4444 },
-      { ko: "와디럼", en: "Wadi Rum", lat: 29.5328, lng: 35.4194 }
+      { ko: "런던", en: "London", lat: 51.5074, lng: -0.1278 },
+      { ko: "옥스퍼드", en: "Oxford", lat: 51.7520, lng: -1.2577 },
+      { ko: "케임브리지", en: "Cambridge", lat: 52.2053, lng: 0.1218 },
+      { ko: "맨체스터", en: "Manchester", lat: 53.4808, lng: -2.2426 },
+      { ko: "리버풀", en: "Liverpool", lat: 53.4084, lng: -2.9916 },
+      { ko: "에든버러", en: "Edinburgh", lat: 55.9533, lng: -3.1883 }
     ]
   },
 
-  // 24. 🇨🇳 중국
+  // 🇨🇳 중국
   {
     code: "CN",
     name: { ko: "중국", en: "China" },
@@ -362,7 +463,7 @@ const TravelRegions = [
     ]
   },
 
-  // 25. 🇨🇿 체코
+  // 🇨🇿 체코
   {
     code: "CZ",
     name: { ko: "체코", en: "Czechia" },
@@ -372,7 +473,7 @@ const TravelRegions = [
     ]
   },
 
-  // 26. 🇰🇿 카자흐스탄
+  // 🇰🇿 카자흐스탄
   {
     code: "KZ",
     name: { ko: "카자흐스탄", en: "Kazakhstan" },
@@ -382,7 +483,27 @@ const TravelRegions = [
     ]
   },
 
-  // 27. 🇨🇦 캐나다
+  // 🇶🇦 카타르
+  {
+    code: "QA",
+    name: { ko: "카타르", en: "Qatar" },
+    cities: [
+      { ko: "도하", en: "Doha", lat: 25.2854, lng: 51.5310 }
+    ]
+  },
+
+  // 🇰🇭 캄보디아
+  {
+    code: "KH",
+    name: { ko: "캄보디아", en: "Cambodia" },
+    cities: [
+      { ko: "시엠립(앙코르와트)", en: "Siem Reap (Angkor Wat)", lat: 13.3633, lng: 103.8564 },
+      { ko: "프놈펜", en: "Phnom Penh", lat: 11.5564, lng: 104.9282 },
+      { ko: "시하누크빌", en: "Sihanoukville", lat: 10.6096, lng: 103.5296 }
+    ]
+  },
+
+  // 🇨🇦 캐나다
   {
     code: "CA",
     name: { ko: "캐나다", en: "Canada" },
@@ -392,20 +513,25 @@ const TravelRegions = [
       { ko: "토론토", en: "Toronto", lat: 43.6532, lng: -79.3832 },
       { ko: "퀘벡시티", en: "Quebec City", lat: 46.8139, lng: -71.2080 },
       { ko: "몬트리올", en: "Montreal", lat: 45.5019, lng: -73.5674 },
-      { ko: "오타와", en: "Ottawa", lat: 45.4215, lng: -75.6972 },
-      { ko: "캘거리", en: "Calgary", lat: 51.0447, lng: -114.0719 },
-      { ko: "에드먼턴", en: "Edmonton", lat: 53.5461, lng: -113.4938 },
       { ko: "밴프", en: "Banff", lat: 51.1784, lng: -115.5708 },
       { ko: "재스퍼", en: "Jasper", lat: 52.8734, lng: -118.0820 },
-      { ko: "위슬러", en: "Whistler", lat: 50.1163, lng: -122.9574 },
-      { ko: "핼리팩스", en: "Halifax", lat: 44.6488, lng: -63.5752 },
-      { ko: "세인트존스", en: "St. John’s", lat: 47.5615, lng: -52.7126 },
-      { ko: "레지나", en: "Regina", lat: 50.4452, lng: -104.6189 },
-      { ko: "새스커툰", en: "Saskatoon", lat: 52.1579, lng: -106.6702 }
+      { ko: "위슬러", en: "Whistler", lat: 50.1163, lng: -122.9574 }
     ]
   },
 
-  // 28. 🇹🇭 태국
+  // 🇭🇷 크로아티아
+  {
+    code: "HR",
+    name: { ko: "크로아티아", en: "Croatia" },
+    cities: [
+      { ko: "두브로브니크", en: "Dubrovnik", lat: 42.6507, lng: 18.0944 },
+      { ko: "스플리트", en: "Split", lat: 43.5081, lng: 16.4402 },
+      { ko: "자그레브", en: "Zagreb", lat: 45.8150, lng: 15.9819 },
+      { ko: "플리트비체 호수국립공원", en: "Plitvice Lakes National Park", lat: 44.8800, lng: 15.6167 }
+    ]
+  },
+
+  // 🇹🇭 태국
   {
     code: "TH",
     name: { ko: "태국", en: "Thailand" },
@@ -419,7 +545,7 @@ const TravelRegions = [
     ]
   },
 
-  // 29. 🇹🇷 튀르키예(터키)
+  // 🇹🇷 튀르키예(터키)
   {
     code: "TR",
     name: { ko: "튀르키예(터키)", en: "Türkiye (Turkey)" },
@@ -430,7 +556,7 @@ const TravelRegions = [
     ]
   },
 
-  // 30. 🇵🇹 포르투갈
+  // 🇵🇹 포르투갈
   {
     code: "PT",
     name: { ko: "포르투갈", en: "Portugal" },
@@ -438,11 +564,22 @@ const TravelRegions = [
       { ko: "리스본", en: "Lisbon", lat: 38.7223, lng: -9.1393 },
       { ko: "포르투", en: "Porto", lat: 41.1579, lng: -8.6291 },
       { ko: "신트라", en: "Sintra", lat: 38.8029, lng: -9.3817 },
-      { ko: "파루(알가르브)", en: "Faro (Algarve)", lat: 37.0194, lng: -7.9304 }
+      { ko: "파루(알가르브)", en: "Faro (Algarve)", lat: 37.0194, lng: -7.9304 },
+      { ko: "라고스", en: "Lagos", lat: 37.1017, lng: -8.6740 }
     ]
   },
 
-  // 31. 🇵🇭 필리핀
+  // 🇵🇱 폴란드
+  {
+    code: "PL",
+    name: { ko: "폴란드", en: "Poland" },
+    cities: [
+      { ko: "바르샤바", en: "Warsaw", lat: 52.2297, lng: 21.0122 },
+      { ko: "크라쿠프", en: "Krakow", lat: 50.0647, lng: 19.9450 }
+    ]
+  },
+
+  // 🇵🇭 필리핀
   {
     code: "PH",
     name: { ko: "필리핀", en: "Philippines" },
@@ -453,7 +590,31 @@ const TravelRegions = [
     ]
   },
 
-  // 32. 🇦🇺 호주
+  // 🇫🇷 프랑스
+  {
+    code: "FR",
+    name: { ko: "프랑스", en: "France" },
+    cities: [
+      { ko: "파리", en: "Paris", lat: 48.8566, lng: 2.3522 },
+      { ko: "니스", en: "Nice", lat: 43.7102, lng: 7.2620 },
+      { ko: "마르세유", en: "Marseille", lat: 43.2965, lng: 5.3698 },
+      { ko: "리옹", en: "Lyon", lat: 45.7640, lng: 4.8357 },
+      { ko: "보르도", en: "Bordeaux", lat: 44.8378, lng: -0.5792 },
+      { ko: "스트라스부르", en: "Strasbourg", lat: 48.5734, lng: 7.7521 },
+      { ko: "프로방스(아비뇽)", en: "Provence (Avignon)", lat: 43.9493, lng: 4.8055 }
+    ]
+  },
+
+  // 🇭🇺 헝가리
+  {
+    code: "HU",
+    name: { ko: "헝가리", en: "Hungary" },
+    cities: [
+      { ko: "부다페스트", en: "Budapest", lat: 47.4979, lng: 19.0402 }
+    ]
+  },
+
+  // 🇦🇺 호주
   {
     code: "AU",
     name: { ko: "호주", en: "Australia" },
@@ -464,6 +625,15 @@ const TravelRegions = [
       { ko: "골드코스트", en: "Gold Coast", lat: -28.0167, lng: 153.4000 },
       { ko: "케언즈", en: "Cairns", lat: -16.9186, lng: 145.7781 },
       { ko: "퍼스", en: "Perth", lat: -31.9523, lng: 115.8613 }
+    ]
+  },
+
+  // 🇭🇰 홍콩
+  {
+    code: "HK",
+    name: { ko: "홍콩", en: "Hong Kong" },
+    cities: [
+      { ko: "홍콩", en: "Hong Kong", lat: 22.3193, lng: 114.1694 }
     ]
   }
 ];

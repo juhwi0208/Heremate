@@ -1,104 +1,146 @@
 // src/pages/Home.js
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+// src/pages/Home.js
+import React from "react";
+import { useNavigate } from "react-router-dom";
 
 const Home = () => {
   const navigate = useNavigate();
 
   return (
-    // ✅ 회색(white) → 초록(#F3FCEB)로 변경해 전체 배경을 채움
-    <div className="min-h-screen bg-[#F3FCEB]">
-      {/* Hero Section (초록) */}
-      <section className="flex flex-col md:flex-row items-center justify-between px-6 md:px-20 py-16 bg-[#F3FCEB]">
-        <div className="text-left mb-8 md:mb-0 md:w-1/2">
-          <h1 className="text-3xl md:text-4xl font-bold mb-4">
-            나의 위치에서 취향에 맞는 관광지를 추천받아보세요!
-          </h1>
-          <ul className="text-gray-600 mb-4 list-disc pl-5 text-sm">
-            <li>취향별 관광명소 보기</li>
-            <li>위치별 관광명소 보기</li>
-            <li>관광지 순위별 보기</li>
-          </ul>
-          <button
-            onClick={() => navigate('/recommend')}
-            className="bg-[#90D744] text-white font-semibold px-5 py-2 rounded hover:bg-[#7cc634]"
-          >
-            나의 위치에서 관광지 추천받기
-          </button>
-        </div>
-        <div className="md:w-1/2">
-          <img
-            src="/assets/map_preview.jpg"
-            alt="지도 미리보기"
-            className="rounded-xl shadow-md w-full"
-          />
-        </div>
-      </section>
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* ===== Hero Section ===== */}
+      <section className="relative h-[420px] md:h-[520px] w-full overflow-hidden">
+        {/* 배경 이미지 */}
+        <img
+          src="/assets/map_preview.jpg"
+          alt="여행 이미지"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        {/* 그라데이션 오버레이 */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/30 to-black/60" />
 
-      {/* 여행 메이트 게시글 (흰색) */}
-      <section className="py-10 px-6 md:px-20 bg-white">
-        <h2 className="text-2xl font-bold mb-8">여행 메이트 게시글</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-4 rounded-xl bg-white shadow">오사카 여행 메이트 구합니다!</div>
-          <div className="p-4 rounded-xl bg-[#DDF3D9] shadow">LA 디즈니 랜드 동행 구해요.</div>
-          <div className="p-4 rounded-xl bg-white shadow">뉴욕 여행 같이 여행하실 분!</div>
-          <div className="p-4 rounded-xl bg-white shadow">제주도 여행 메이트 구해요.</div>
-        </div>
-      </section>
-
-      {/* 여행 계획 (초록) */}
-      <section className="bg-[#E2F6CB] py-16 px-6 md:px-20">
-        <h2 className="text-2xl font-bold mb-8">여행 계획</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="border rounded-xl p-4 bg-white">
-            <h3 className="text-lg font-semibold mb-2 text-[#009C89]">일본 오사카<br />25.01.23 ~ 25.01.28</h3>
-            <ul className="text-sm text-gray-600">
-              <li>⧠ 맛집 둘러보기</li>
-              <li>⧠ 유니버설 스튜디오</li>
-              <li>⧠ 오사카 성 야경</li>
-              <li>⧠ 신세카이 관광</li>
-            </ul>
-          </div>
-          <div className="border rounded-xl p-4 bg-white">
-            <h3 className="text-lg font-semibold mb-2 text-[#009C89]">캐나다 밴프<br />25.05.20 ~ 25.06.05</h3>
-            <ul className="text-sm text-gray-600">
-              <li>⧠ 레이크 루이스</li>
-              <li>⧠ 캐나다 로키산맥</li>
-              <li>⧠ 밴프 국립공원 탐험</li>
-              <li>⧠ 아이스필드</li>
-              <li>⧠ 보우폭포</li>
-            </ul>
-          </div>
-          <div className="border rounded-xl p-4 bg-white">
-            <h3 className="text-lg font-semibold mb-2 text-[#009C89]">대만 타이베이<br />25.04.23 ~ 25.04.28</h3>
-            <ul className="text-sm text-gray-600">
-              <li>⧠ 타이베이 101 타워</li>
-              <li>⧠ 단수이</li>
-              <li>⧠ 스린 야시장</li>
-              <li>⧠ 고궁박물관</li>
-            </ul>
+        {/* 중앙 텍스트 + 버튼 */}
+        <div className="relative z-10 flex h-full items-center justify-center px-4">
+          <div className="text-center text-white max-w-2xl">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight mb-4">
+              함께 떠나는 여행,
+              <br />
+              특별한 추억
+            </h1>
+            <p className="text-sm md:text-base text-zinc-100 mb-8">
+              혼자 여행하기 아쉬우셨나요? 나와 잘 맞는 여행 메이트와 함께
+              <br className="hidden md:block" />
+              더 즐거운 여행을 만들어보세요.
+            </p>
+            <button
+              onClick={() => navigate("/mate")}
+              className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-8 py-3 text-sm md:text-base font-semibold shadow-lg hover:bg-emerald-600 transition"
+            >
+              메이트 찾기 시작하기
+            </button>
           </div>
         </div>
       </section>
 
-      {/* 여행 스토리 (흰색) */}
-      <section className="py-16 px-6 md:px-20 bg-white">
-        <h2 className="text-2xl font-bold mb-8">여행 스토리</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <img src="/assets/story1.jpg" alt="스토리1" className="rounded-xl" />
-            <p className="mt-2 text-sm text-gray-600">25.01.23 ~ 25.01.28 일본 삿포로</p>
-          </div>
-          <div>
-            <img src="/assets/story2.jpg" alt="스토리2" className="rounded-xl" />
-            <p className="mt-2 text-sm text-gray-600">25.01.23 ~ 25.01.28 캐나다 밴프</p>
-          </div>
-          <div>
-            <img src="/assets/story3.jpg" alt="스토리3" className="rounded-xl" />
-            <p className="mt-2 text-sm text-gray-600">25.04.23 ~ 25.01.28 대만 타이베이</p>
+      {/* ===== Why HereMate ===== */}
+      <section className="bg-white py-12 md:py-16">
+        <div className="max-w-5xl mx-auto px-4">
+          <h2 className="text-center text-2xl md:text-3xl font-semibold text-zinc-900 mb-3">
+            왜 HereMate를 선택해야 할까요?
+          </h2>
+          <p className="text-center text-sm md:text-base text-zinc-500 mb-10">
+            안전하고 신뢰할 수 있는 여행 메이트 매칭 서비스로
+            <br className="hidden md:block" />
+            새로운 여행 경험을 만들어보세요.
+          </p>
+
+          <div className="grid gap-10 md:grid-cols-3">
+            {/* 기능 1: 안전하고 편리한 매칭 */}
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50">
+                <span className="text-emerald-500 text-xl">🛡️</span>
+              </div>
+              <h3 className="mb-2 text-base md:text-lg font-semibold text-zinc-900">
+                안전하고 편리한 매칭
+              </h3>
+              <p className="text-sm text-zinc-500 leading-relaxed">
+                검증된 사용자들과 안전하게 연결되고,
+                <br />
+                나와 잘 맞는 여행 메이트를 쉽게 찾을 수 있어요.
+              </p>
+            </div>
+
+            {/* 기능 2: 여행 계획 세우기 */}
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-sky-50">
+                <span className="text-sky-500 text-xl">🗺️</span>
+              </div>
+              <h3 className="mb-2 text-base md:text-lg font-semibold text-zinc-900">
+                여행 계획 세우기
+              </h3>
+              <p className="text-sm text-zinc-500 leading-relaxed">
+                Google Maps 기반 일정 작성 기능으로
+                <br />
+                여행 동선과 장소 정보를 한 번에 관리할 수 있어요.
+              </p>
+            </div>
+
+            {/* 기능 3: 스토리 생성 */}
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-violet-50">
+                <span className="text-violet-500 text-xl">📖</span>
+              </div>
+              <h3 className="mb-2 text-base md:text-lg font-semibold text-zinc-900">
+                스토리 생성
+              </h3>
+              <p className="text-sm text-zinc-500 leading-relaxed">
+                여행 사진만 올리면 자동으로 여행 스토리를 생성해
+                <br />
+                나만의 특별한 여행 기록을 손쉽게 남길 수 있어요.
+              </p>
+            </div>
           </div>
         </div>
       </section>
+
+      {/* ===== 중간 CTA 섹션 ===== */}
+      <section className="bg-emerald-500 text-white py-12 md:py-16">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h2 className="text-2xl md:text-3xl font-semibold mb-3">
+            지금 바로 여행 메이트를 찾아보세요!
+          </h2>
+          <p className="text-sm md:text-base text-emerald-50 mb-8">
+            새로운 사람들과 함께하는 특별한 여행이 기다리고 있어요.
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <button
+              onClick={() => navigate("/mate")}
+              className="inline-flex items-center justify-center rounded-full bg-white px-8 py-3 text-sm md:text-base font-semibold text-emerald-600 shadow hover:bg-emerald-50 transition"
+            >
+              메이트 찾기
+            </button>
+            <button
+              onClick={() => navigate("/mate/new")}
+              className="inline-flex items-center justify-center rounded-full border border-white/80 px-8 py-3 text-sm md:text-base font-semibold text-white hover:bg-emerald-600/10 transition"
+            >
+              게시글 작성
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Footer ===== */}
+      <footer className="bg-zinc-900 text-zinc-300 py-8">
+        <div className="max-w-5xl mx-auto px-4 text-center">
+          <div className="mb-2 text-lg font-semibold text-white">HereMate</div>
+          <p className="text-xs text-zinc-400 mb-4">
+            함께 떠나는 여행, 특별한 추억을 만들어보세요.
+          </p>
+          <p className="text-[11px] text-zinc-500">
+            © {new Date().getFullYear()} HereMate. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };

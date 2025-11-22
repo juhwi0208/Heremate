@@ -85,7 +85,7 @@ export default function ChatPage() {
               roomIdOverride={currentIdNum}
               embed
               roomMeta={currentRoomMeta}
-              onRead={handleRead}
+              
             />
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">

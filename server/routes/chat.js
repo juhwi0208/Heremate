@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { verifyToken } = require('../middlewares/auth'); // 프로젝트에 맞게
+const chatController = require('../controllers/chatController');
 
 // [POST] 방 생성(또는 기존 방 찾기)
 // body: { targetUserId:number, postId?:number }
@@ -151,6 +152,11 @@ router.get('/rooms', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'list rooms failed' });
   }
 });
+
+
+// [GET] 이 채팅방에 연결된 최신 trip + meetStatus
+router.get('/rooms/:id/trip', verifyToken, chatController.getTripOfRoom);
+
 
 
 module.exports = router;

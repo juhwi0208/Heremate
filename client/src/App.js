@@ -37,6 +37,16 @@ import PlanEditor from './features/plan/PlanEditor/PlanEditor';
 function App() {
   const [user, setUser] = useState(null);
   const location = useLocation(); // ✅ 현재 경로 확인용
+  const API_BASE =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
+  process.env.REACT_APP_API_BASE_URL ||
+  'http://localhost:4000';
+
+  const resolveAvatarUrl = (path) => {
+    if (!path) return '';
+    if (/^https?:\/\//.test(path)) return path; // 이미 http로 시작하면 그대로 사용
+    return `${API_BASE.replace(/\/$/, '')}${path}`; // 상대경로면 API_BASE 붙이기
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -49,15 +59,15 @@ function App() {
 
       // 2차: 서버 프로필로 덮어쓰기(avatarUrl 포함)
       axios.get('/api/users/me')
-       .then(({ data }) => {
-         setUser((u) => ({
-           ...u,
-           nickname: data?.nickname ?? u?.nickname,
-           avatarUrl: data?.avatarUrl || u?.avatarUrl,
-           email: data?.email ?? u?.email,
-           role: data?.role ?? u?.role,
-         }));
-       })
+        .then(({ data }) => {
+          setUser((u) => ({
+            ...u,
+            nickname: data?.nickname ?? u?.nickname,
+            avatarUrl: resolveAvatarUrl(data?.avatarUrl || u?.avatarUrl),
+            email: data?.email ?? u?.email,
+            role: data?.role ?? u?.role,
+          }));
+        })
        .catch((e) => {
          // 401=비로그인/만료 → 조용히 로그아웃 상태로 시작
          if (e?.response?.status === 401) {
@@ -98,7 +108,7 @@ function App() {
               <Route path="/login" element={<Login setUser={setUser} />} />
               <Route path="/signup" element={<SignUp setUser={setUser} />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/mypage" element={<ProfileTrust />} />
+              <Route path="/mypage" element={<ProfileTrust setUser={setUser} />} />
               <Route path="/account/email" element={<EmailChange />} />
               <Route path="/auth/kakao/callback" element={<KakaoRedirectHandler setUser={setUser} />} />
               

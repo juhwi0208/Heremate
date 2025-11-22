@@ -4,8 +4,8 @@ import React, { useMemo } from 'react';
 import TravelRegions from '../data/TravelRegions';
 
 // 라벨
-const labelCountry = (c) => `${c.name.ko} (${c.name.en})`;
-const labelCity    = (city) => `${city.ko} (${city.en})`;
+const labelCountry = (c) => `${c.name.ko}`;
+const labelCity    = (city) => `${city.ko}`;
 
 // 이름→코드/인덱스 유틸
 function findCountryByNameOrCode(countries, needle) {
@@ -165,7 +165,6 @@ export function countryCityToLocation(value) {
   if (!value?.countryCode || !(value.cityKo || value.cityName)) return '';
   const c = TravelRegions.find(v => v.code === value.countryCode);
   const cityKo = value.cityKo || value.cityName || '';
-  const cityEn = value.cityEn || '';
   if (!c) return cityKo;
-  return `${c.name.ko} ${cityKo} (${c.name.en} ${cityEn})`.trim();
+  return `${c.name.ko} ${cityKo}`.trim();
 }

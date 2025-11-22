@@ -22,12 +22,17 @@ const Header = ({ user, setUser }) => {
   };
 
   return (
-    <header className="flex justify-between items-center px-6 py-3 bg-white">
-      <div className="text-xl font-bold text-green-600 cursor-pointer" onClick={() => navigate('/')}>HereMate</div>
+    // 🔹 헤더를 항상 맨 위 레이어로
+    <header className="relative z-30 flex justify-between items-center px-6 py-3 bg-white shadow">
+      <div
+        className="text-xl font-bold text-green-600 cursor-pointer"
+        onClick={() => navigate('/')}
+      >
+        HereMate
+      </div>
 
-      {/* 🟢 NavLink로 교체 + isActive 하이라이트 */}
       <nav className="hidden md:flex gap-3 text-sm font-medium text-gray-700">
-        {NAV.map(({to, label}) => (
+        {NAV.map(({ to, label }) => (
           <NavLink
             key={to}
             to={to}
@@ -56,14 +61,15 @@ const Header = ({ user, setUser }) => {
               />
               {user.nickname}
             </button>
+
             {dropdownOpen && (
-              <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-md z-10">
+              // 🔹 드롭다운도 확실하게 위로
+              <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-md z-40">
                 <button
                   onClick={() => {
                     setDropdownOpen(false);
                     navigate('/mypage');
                   }}
-                  
                   className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
                 >
                   마이페이지

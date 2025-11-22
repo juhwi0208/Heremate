@@ -1,11 +1,26 @@
 // client/src/features/chat/ChatRoom.js
-// client/src/features/chat/ChatRoom.js
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import axios from '../../api/axiosInstance';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 
 const SCROLL_THRESHOLD = 16; // 바닥 판정 여유(px)
+
+// 오늘이 trip 객체의 기간 안인지 확인
+const isTodayWithinTrip = (tripObj) => {
+  if (!tripObj?.start_date || !tripObj?.end_date) return false;
+  const today = new Date();
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const start = new Date(tripObj.start_date);
+  const end = new Date(tripObj.end_date);
+  const startDay = new Date(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate()
+  );
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  return d >= startDay && d <= endDay;
+};
 
 const formatKoreanDate = (iso) =>
   new Date(iso).toLocaleDateString('ko-KR', {
@@ -13,6 +28,14 @@ const formatKoreanDate = (iso) =>
     month: 'long',
     day: 'numeric',
   });
+
+// mm:ss 포맷
+const formatCountdown = (sec) => {
+  if (sec == null) return '';
+  const m = String(Math.floor(sec / 60)).padStart(2, '0');
+  const s = String(sec % 60).padStart(2, '0');
+  return `${m}:${s}`;
+};
 
 // 신고 사유 프리셋
 const REPORT_REASONS = [
@@ -28,9 +51,9 @@ export default function ChatRoom({
   roomIdOverride,
   embed = false,
   roomMeta,
-  onRead,
 }) {
   const { id: routeId } = useParams();
+  const navigate = useNavigate();
   const roomId = roomIdOverride || routeId;
 
   const [msgs, setMsgs] = useState([]);
@@ -61,6 +84,29 @@ export default function ChatRoom({
   const [reportDetail, setReportDetail] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
+  // 여행 메이트 / trip 상태
+  const [trip, setTrip] = useState(null);
+  const [tripLoading, setTripLoading] = useState(false);
+  const [tripError, setTripError] = useState(null);
+
+  const [tripModalOpen, setTripModalOpen] = useState(false);
+  const [tripTitle, setTripTitle] = useState('');
+  const [tripStart, setTripStart] = useState('');
+  const [tripEnd, setTripEnd] = useState('');
+  const [tripActionLoading, setTripActionLoading] = useState(false);
+
+  
+  const [meetActionLoading, setMeetActionLoading] = useState(false);
+
+  // A안: 동행 시작 카운트다운/초대 모달
+  const [meetPhase, setMeetPhase] = useState('idle'); // idle | countdown | met | expired
+  const [meetCountdownSec, setMeetCountdownSec] = useState(null);
+  const countdownTimerRef = useRef(null);
+  const [meetInviteModal, setMeetInviteModal] = useState(null); // { tripId, startedByNickname, expiresAt }
+
+  // A안: 여행 날짜 선택 시 게시글 기간 밖 선택 허용 여부
+  const [usePostRangeOnly, setUsePostRangeOnly] = useState(true);
+
   const token = localStorage.getItem('token');
   const meId = token ? jwtDecode(token)?.id : null;
 
@@ -69,6 +115,13 @@ export default function ChatRoom({
   const subtitle =
     roomMeta?.post_title ||
     (roomMeta?.post_id ? `게시글 #${roomMeta.post_id}` : null);
+
+  const [postStartDate, setPostStartDate] = useState(
+    roomMeta?.post_start_date || roomMeta?.start_date || null
+  );
+  const [postEndDate, setPostEndDate] = useState(
+    roomMeta?.post_end_date || roomMeta?.end_date || null
+  );
 
   // -------- 스크롤 유틸 --------
   const scrollToBottom = useCallback(() => {
@@ -120,6 +173,45 @@ export default function ChatRoom({
 
     return { merged, added };
   }, []);
+
+  // -------- 카운트다운 헬퍼 --------
+  const clearCountdown = useCallback(() => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setMeetCountdownSec(null);
+  }, []);
+
+  const startCountdown = useCallback(
+    (expiresAtIso) => {
+      if (!expiresAtIso) return;
+      clearCountdown();
+      setMeetPhase('countdown');
+
+      const expireMs = new Date(expiresAtIso).getTime();
+
+      const tick = () => {
+        const now = Date.now();
+        const diff = Math.max(0, Math.floor((expireMs - now) / 1000));
+        setMeetCountdownSec(diff);
+        if (diff <= 0) {
+          clearCountdown();
+          setMeetPhase('expired');
+        }
+      };
+
+      tick();
+      countdownTimerRef.current = setInterval(tick, 1000);
+    },
+    [clearCountdown]
+  );
+
+  useEffect(() => {
+    return () => {
+      clearCountdown();
+    };
+  }, [clearCountdown]);
 
   // -------- 브라우저 알림 --------
   useEffect(() => {
@@ -214,6 +306,81 @@ export default function ChatRoom({
     }
   };
 
+  // -------- 이 채팅방의 trip + meetStatus 로드 --------
+  const fetchTripForRoom = useCallback(async () => {
+    if (!roomId) return;
+    setTripLoading(true);
+    setTripError(null);
+
+    try {
+      const res = await axios.get(`/api/chats/rooms/${roomId}/trip`);
+      const data = res.data || {};
+
+        // 서버에서 내려준 게시글 여행 기간을 state로 반영
+      if (data.post_start_date || data.post_end_date) {
+        setPostStartDate(data.post_start_date || null);
+        setPostEndDate(data.post_end_date || null);
+      }
+
+      // 기존처럼 trip만 오는 경우와, { room, post, trip, meetStatus } 형태 둘 다 지원
+      const tripData = data.trip || null;
+      setTrip(tripData);
+
+      // meetStatus가 있으면 A안 카운트다운 상태 세팅
+      const meetStatus = data.meetStatus;
+      if (meetStatus?.phase) {
+        setMeetPhase(meetStatus.phase);
+        if (meetStatus.phase === 'countdown' && meetStatus.expiresAt) {
+          startCountdown(meetStatus.expiresAt);
+
+          // 상대가 먼저 시작한 경우 → 큰 모달
+          if (
+            meetStatus.startedBy &&
+            meId &&
+            Number(meetStatus.startedBy) !== Number(meId)
+          ) {
+            setMeetInviteModal({
+              tripId: tripData?.id,
+              startedByNickname: meetStatus.startedByNickname || '상대방',
+              expiresAt: meetStatus.expiresAt,
+            });
+          }
+        } else if (meetStatus.phase === 'met') {
+          clearCountdown();
+          setMeetCountdownSec(null);
+          setMeetPhase('met');
+        } else if (meetStatus.phase === 'expired') {
+          clearCountdown();
+          setMeetCountdownSec(0);
+          setMeetPhase('expired');
+        }
+      } else if (tripData?.status === 'met' || tripData?.status === 'finished') {
+        // meetStatus 없지만 trip status로 met 추정
+        clearCountdown();
+        setMeetPhase('met');
+      } else {
+        // 별도 정보 없으면 idle
+        clearCountdown();
+        setMeetPhase('idle');
+      }
+    } catch (err) {
+      console.error('trip 로드 실패:', err);
+      // 404 등은 "trip 없음"으로 처리
+      setTrip(null);
+      setMeetPhase('idle');
+      clearCountdown();
+      if (err.response && err.response.status >= 500) {
+        setTripError('여행 메이트 정보를 불러오지 못했습니다.');
+      }
+    } finally {
+      setTripLoading(false);
+    }
+  }, [roomId, meId, startCountdown, clearCountdown]);
+
+  useEffect(() => {
+    fetchTripForRoom();
+  }, [fetchTripForRoom]);
+
   // -------- 메시지 로딩(폴링) --------
   const fetchMsgs = useCallback(async () => {
     if (!roomId) return;
@@ -254,8 +421,6 @@ export default function ChatRoom({
             requestAnimationFrame(() => {
               const newHeight = el.scrollHeight;
               const delta = newHeight - prevHeight;
-              // 위쪽에 이전 메시지가 로드되는 구조가 아니라면
-              // 그냥 prevTop 유지해도 되고, delta 더해도 됨
               el.scrollTop = prevTop + delta;
             });
           }
@@ -269,7 +434,7 @@ export default function ChatRoom({
       setLoading(false);
       isFetchingRef.current = false;
     }
-  }, [roomId]);
+  }, [roomId, mergeMessages, scrollToBottom]);
 
   // roomId 변경 시: 초기화 + 폴링 재시작 + 신고 상태 리셋
   useEffect(() => {
@@ -284,6 +449,10 @@ export default function ChatRoom({
     setReportReason('');
     setReportDetail('');
 
+    setMeetPhase('idle');
+    clearCountdown();
+    setMeetInviteModal(null);
+
     if (!roomId) return;
 
     fetchMsgs();
@@ -293,7 +462,7 @@ export default function ChatRoom({
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
       isFetchingRef.current = false;
     };
-  }, [roomId, fetchMsgs]);
+  }, [roomId, fetchMsgs, clearCountdown]);
 
   // 스크롤 리스너
   useEffect(() => {
@@ -315,11 +484,10 @@ export default function ChatRoom({
     return () => el.removeEventListener('scroll', onScroll);
   }, [updateIsAtBottom]);
 
-  // 읽음 처리 + 상위 콜백
+  // 읽음 처리
   useEffect(() => {
     if (!roomId) return;
     axios.put(`/api/chats/rooms/${roomId}/read`).catch(() => {});
-    if (onRead) onRead(roomId);
   }, [roomId]);
 
   // -------- 전송 --------
@@ -400,6 +568,202 @@ export default function ChatRoom({
     }
   };
 
+  // -------- trip 생성/수락/거절 핸들러 --------
+ const openTripModal = () => {
+    const defaultTitle =
+      (roomMeta && roomMeta.post_title) ||
+      (trip && trip.title) ||
+      '여행 메이트';
+
+    // 1순위: 게시글 날짜, 2순위: trip 날짜
+    const defaultStart =
+      (postStartDate && String(postStartDate).slice(0, 10)) ||
+      (trip?.start_date && String(trip.start_date).slice(0, 10)) ||
+      '';
+    const defaultEnd =
+      (postEndDate && String(postEndDate).slice(0, 10)) ||
+      (trip?.end_date && String(trip.end_date).slice(0, 10)) ||
+      '';
+
+    setTripTitle(defaultTitle);
+    setTripStart(defaultStart);
+    setTripEnd(defaultEnd);
+
+    // 게시글 기간이 있으면 기본적으로 그 안에서만 선택하게(true)
+    setUsePostRangeOnly(!!(postStartDate && postEndDate));
+
+    setTripModalOpen(true);
+  };
+  
+  const closeTripModal = () => {
+    if (tripActionLoading) return;
+    setTripModalOpen(false);
+  };
+
+  const handleCreateTrip = async () => {
+    if (!roomId) return;
+    if (!tripStart || !tripEnd) {
+      alert('여행 시작일과 종료일을 선택해주세요.');
+      return;
+    }
+    if (tripStart > tripEnd) {
+      alert('종료일이 시작일보다 빠를 수 없습니다.');
+      return;
+    }
+
+    // 게시글 기간 안에서만 선택하는 옵션
+    if (usePostRangeOnly && postStartDate && postEndDate) {
+      if (tripStart < postStartDate || tripEnd > postEndDate) {
+        alert('게시글에 작성한 여행 기간 밖의 날짜는 선택할 수 없습니다.');
+        return;
+      }
+    }
+
+    try {
+      setTripActionLoading(true);
+      const res = await axios.post('/api/trips', {
+        chatRoomId: Number(roomId),
+        startDate: tripStart,
+        endDate: tripEnd,
+        title: tripTitle,
+      });
+      const newTrip = res.data?.trip || res.data;
+      setTrip(newTrip);
+      setTripModalOpen(false);
+    } catch (err) {
+      console.error('trip 생성 실패:', err);
+      const msg =
+        err.response?.data?.error || '여행 메이트 확정에 실패했습니다.';
+      alert(msg);
+    } finally {
+      setTripActionLoading(false);
+    }
+  };
+
+  const handleAcceptTrip = async () => {
+    if (!trip?.id) return;
+    try {
+      setTripActionLoading(true);
+      const res = await axios.post(`/api/trips/${trip.id}/invite/accept`);
+      const newTrip = res.data?.trip || res.data;
+      setTrip(newTrip);
+      if (newTrip?.status === 'ready') {
+        setMeetPhase('idle');
+        clearCountdown();
+      }
+    } catch (err) {
+      console.error('trip 수락 실패:', err);
+      alert(err.response?.data?.error || '여행 초대 수락에 실패했습니다.');
+    } finally {
+      setTripActionLoading(false);
+    }
+  };
+
+  const handleDeclineTrip = async () => {
+    if (!trip?.id) return;
+    if (!window.confirm('이 여행 초대를 거절할까요?')) return;
+
+    try {
+      setTripActionLoading(true);
+      const res = await axios.post(`/api/trips/${trip.id}/invite/decline`);
+      const newTrip = res.data?.trip || res.data;
+      setTrip(newTrip);
+      setMeetPhase('idle');
+      clearCountdown();
+    } catch (err) {
+      console.error('trip 거절 실패:', err);
+      alert(err.response?.data?.error || '여행 초대 거절에 실패했습니다.');
+    } finally {
+      setTripActionLoading(false);
+    }
+  };
+
+  // -------- A안: 동행 시작 버튼(카운트다운 지원) --------
+  const handleStartTogetherClick = async () => {
+    if (!trip?.id) return;
+    if (!isTodayWithinTrip(trip)) {
+      alert('여행 기간 내에서만 동행 시작을 할 수 있습니다.');
+      return;
+    }
+    try {
+      setMeetActionLoading(true);
+      const res = await axios.post(`/api/trips/${trip.id}/meet/button`);
+      const data = res.data || {};
+
+      if (data.trip) {
+        setTrip(data.trip);
+      }
+
+      // 서버가 기존처럼 met / waiting만 주는 경우
+      if (data.met) {
+        clearCountdown();
+        setMeetPhase('met');
+        alert('동행이 인증되었습니다! 즐거운 여행 되세요 😊');
+        return;
+      }
+
+      if (data.waiting && !data.expiresAt) {
+        setMeetPhase('countdown'); // 시간 정보는 없지만 상태만 표시
+        alert('내가 먼저 동행 시작을 눌렀어요. 상대도 10분 이내에 누르면 인증됩니다.');
+        return;
+      }
+
+      // A안 확장: expiresAt / meetStatus 가 내려오는 경우
+      if (data.expiresAt) {
+        startCountdown(data.expiresAt);
+        setMeetPhase('countdown');
+      }
+
+      if (data.meetStatus?.phase) {
+        const phase = data.meetStatus.phase;
+        setMeetPhase(phase);
+        if (phase === 'countdown' && data.meetStatus.expiresAt) {
+          startCountdown(data.meetStatus.expiresAt);
+        } else if (phase === 'met') {
+          clearCountdown();
+        } else if (phase === 'expired') {
+          clearCountdown();
+          setMeetCountdownSec(0);
+        }
+      }
+    } catch (err) {
+      console.error('함께 시작 버튼 실패:', err);
+      alert(
+        err.response?.data?.error ||
+          '동행 시작 처리 중 오류가 발생했습니다.'
+      );
+    } finally {
+      setMeetActionLoading(false);
+    }
+  };
+
+  // 모달에서 "지금 동행 시작하기" (B가 눌렀을 때)
+  // 서버에서도 동일 엔드포인트(/meet/button)를 사용해
+  // start/confirm 둘 다 처리한다고 가정
+  const onAcceptMeetFromModal = async () => {
+    const tripId = meetInviteModal?.tripId || trip?.id;
+    if (!tripId) return;
+    try {
+      const res = await axios.post(`/api/trips/${tripId}/meet/button`);
+      const data = res.data || {};
+      if (data.trip) setTrip(data.trip);
+
+      if (data.met) {
+        clearCountdown();
+        setMeetPhase('met');
+      }
+      setMeetInviteModal(null);
+      fetchTripForRoom();
+    } catch (e) {
+      console.error('meet confirm failed:', e);
+      alert('동행 시작 확정에 실패했습니다.');
+    }
+  };
+
+  const onSnoozeMeetFromModal = () => {
+    setMeetInviteModal(null);
+  };
+
   const containerClass = embed
     ? 'h-full flex flex-col bg-white'
     : 'max-w-2xl mx-auto h-[80vh] flex flex-col border rounded shadow bg-white';
@@ -412,6 +776,9 @@ export default function ChatRoom({
     if (!notificationEnabled) return '알림 받기';
     return '알림 켜짐';
   })();
+
+  const canRestartMeet =
+    meetPhase === 'expired' && isTodayWithinTrip(trip || {});
 
   return (
     <div className={containerClass}>
@@ -426,8 +793,20 @@ export default function ChatRoom({
               {otherNickname}
             </div>
             {subtitle && (
-              <div className="text-[11px] text-gray-500 truncate max-w-[220px] sm:max-w-xs">
-                {subtitle}
+              <div className="flex items-center gap-2">
+                <div className="text-[11px] text-gray-500 truncate max-w-[160px] sm:max-w-xs">
+                  {subtitle}
+                </div>
+                {/* 게시글 이동 버튼 */}
+                {roomMeta?.post_id && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/mate/${roomMeta.post_id}`)}
+                    className="hidden sm:inline-flex text-[11px] px-2 py-0.5 rounded-full border text-gray-600 hover:bg-gray-50"
+                  >
+                    게시글 보러가기
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -470,8 +849,150 @@ export default function ChatRoom({
         </div>
       </div>
 
-      {/* 본문: 메시지 리스트 + 입력창(sticky) */}
+      {/* 본문: trip 배너 + 메시지 리스트 + 입력창(sticky) */}
       <div className="flex-1 flex flex-col min-h-0">
+        {/* 여행 메이트 / trip 상태 배너 */}
+        <div className="border-b bg-emerald-50/70 px-4 py-2 text-[11px] sm:text-xs flex flex-wrap items-center gap-2">
+          {tripLoading ? (
+            <span className="text-gray-500">여행 메이트 정보를 불러오는 중...</span>
+          ) : tripError ? (
+            <span className="text-red-500">{tripError}</span>
+          ) : !trip ? (
+            <>
+              <span className="text-emerald-800">
+                아직 이 상대와의 여행이 확정되지 않았어요. 동행 일정과 기간을 먼저 정해보세요.
+              </span>
+              <button
+                type="button"
+                onClick={openTripModal}
+                className="ml-auto px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700"
+              >
+                여행 메이트 확정하기
+              </button>
+            </>
+          ) : (
+            <>
+              {trip.status === 'pending' && (
+                <>
+                  <span className="text-emerald-900 font-medium">
+                    여행 메이트 초대가 진행 중입니다.
+                  </span>
+                  <span className="text-emerald-900/80">
+                    기간: {trip.start_date?.slice(0, 10)} ~ {trip.end_date?.slice(0, 10)}
+                  </span>
+                  {meId && Number(trip.user_b) === Number(meId) ? (
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAcceptTrip}
+                        disabled={tripActionLoading}
+                        className="px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        수락하기
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeclineTrip}
+                        disabled={tripActionLoading}
+                        className="px-2.5 py-1 rounded-full border border-emerald-400 text-emerald-700 text-[11px] hover:bg-emerald-50 disabled:opacity-60"
+                      >
+                        거절하기
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="ml-auto text-emerald-700">
+                      초대를 보냈어요. 상대의 수락을 기다리는 중입니다.
+                    </span>
+                  )}
+                </>
+              )}
+
+              {trip.status === 'ready' && (
+                <>
+                  <span className="text-emerald-900 font-medium">
+                    여행 메이트가 확정되었습니다.
+                  </span>
+                  <span className="text-emerald-900/80">
+                    기간: {trip.start_date?.slice(0, 10)} ~ {trip.end_date?.slice(0, 10)}
+                  </span>
+                  <div className="ml-auto flex items-center gap-2">
+                    {meetPhase === 'idle' && (
+                      <>
+                        <span className="text-[11px] text-emerald-700 hidden sm:inline">
+                          여행 당일에 둘 다 10분 이내로 &quot;함께 시작&quot;을 누르면
+                          동행이 인증됩니다.
+                        </span>
+                        {isTodayWithinTrip(trip) ? (
+                          <button
+                            type="button"
+                            onClick={handleStartTogetherClick}
+                            disabled={meetActionLoading}
+                            className="px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700 disabled:opacity-60"
+                          >
+                            {meetActionLoading ? '처리 중...' : '오늘 동행 시작하기'}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-emerald-600">
+                            여행 기간 중에 동행 시작 버튼이 활성화됩니다.
+                          </span>
+                        )}
+                      </>
+                    )}
+
+                    {meetPhase === 'countdown' && (
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <span>동행 시작 확인 대기 중</span>
+                        <span className="font-mono font-semibold text-red-600">
+                          {formatCountdown(meetCountdownSec)}
+                        </span>
+                      </div>
+                    )}
+
+                    {meetPhase === 'expired' && (
+                      <div className="flex items-center gap-2 text-[11px] text-red-600">
+                        <span>카운트다운이 종료되었어요.</span>
+                        {canRestartMeet && (
+                          <button
+                            type="button"
+                            onClick={handleStartTogetherClick}
+                            disabled={meetActionLoading}
+                            className="px-3 py-1 rounded-full bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+                          >
+                            다시 동행 시작하기
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {['met', 'finished'].includes(trip.status) && (
+                <>
+                  <span className="text-emerald-900 font-medium">
+                    동행이 시작된 여행입니다.
+                  </span>
+                  {trip.met_at && (
+                    <span className="text-emerald-900/80">
+                      인증 시각: {formatKoreanDate(trip.met_at)}{' '}
+                      {new Date(trip.met_at).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                </>
+              )}
+
+              {trip.status === 'cancelled' && (
+                <span className="text-emerald-800">
+                  이 여행 초대는 취소/거절되었습니다. 필요하다면 다시 여행 메이트를 확정할 수 있습니다.
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
         {/* 메시지 리스트 */}
         <div
           ref={listRef}
@@ -496,7 +1017,6 @@ export default function ChatRoom({
               if (showDate) lastDateLabel = dateLabel;
 
               const textContent = m.message ?? m.content ?? '';
-
               const isSelected = selectedMessageIds.includes(m.id);
 
               return (
@@ -616,6 +1136,127 @@ export default function ChatRoom({
         </div>
       </div>
 
+      {/* 여행 메이트 확정 모달 (A안 날짜 제한 포함) */}
+      {tripModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-5">
+            <h2 className="text-sm font-semibold text-gray-900 mb-3">
+              여행 메이트 확정하기
+            </h2>
+            <p className="text-xs text-gray-500 mb-3">
+              이 채팅방의 상대와 함께할 여행 기간과 제목을 설정합니다.
+            </p>
+
+            {/* 게시글 기간 안내 (있을 때만) */}
+            {postStartDate && postEndDate && (
+              <div className="mb-3 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                게시글에 작성한 여행 기간:{' '}
+                <span className="font-medium">
+                  {postStartDate} ~ {postEndDate}
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">
+                  여행 제목 (선택)
+                </label>
+                <input
+                  type="text"
+                  className="w-full border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                  value={tripTitle}
+                  onChange={(e) => setTripTitle(e.target.value)}
+                  placeholder="예: 3월 제주 힐링 여행"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    시작일
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    value={tripStart}
+                    onChange={(e) => setTripStart(e.target.value)}
+                    min={
+                      usePostRangeOnly && postStartDate
+                        ? postStartDate
+                        : undefined
+                    }
+                    max={
+                      usePostRangeOnly && postEndDate
+                        ? postEndDate
+                        : undefined
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    종료일
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    value={tripEnd}
+                    onChange={(e) => setTripEnd(e.target.value)}
+                    min={
+                      usePostRangeOnly && postStartDate
+                        ? postStartDate
+                        : undefined
+                    }
+                    max={
+                      usePostRangeOnly && postEndDate
+                        ? postEndDate
+                        : undefined
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 게시글 기간 외 날짜 선택 토글 */}
+            {postStartDate && postEndDate && (
+              <div className="mt-3 text-xs text-gray-600 flex items-center gap-2">
+                <input
+                  id="custom-date-toggle"
+                  type="checkbox"
+                  checked={!usePostRangeOnly}
+                  onChange={() => setUsePostRangeOnly((prev) => !prev)}
+                />
+                <label
+                  htmlFor="custom-date-toggle"
+                  className="cursor-pointer"
+                >
+                  게시글 기간 외 다른 날짜도 선택하기
+                </label>
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={closeTripModal}
+                disabled={tripActionLoading}
+                className="px-3 py-1.5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateTrip}
+                disabled={tripActionLoading}
+                className="px-3 py-1.5 rounded-full bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {tripActionLoading ? '저장 중...' : '확정하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 신고 모달 */}
       {reportOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -640,7 +1281,8 @@ export default function ChatRoom({
 
             {/* 선택된 메시지 개수 */}
             <div className="text-xs text-gray-600 mb-2">
-              선택된 메시지: <span className="font-semibold">
+              선택된 메시지:{' '}
+              <span className="font-semibold">
                 {selectedMessageIds.length}
               </span>
               개
@@ -693,6 +1335,43 @@ export default function ChatRoom({
                 }
               >
                 {reportSubmitting ? '신고 중...' : '신고 접수'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* A안: 상대가 먼저 동행 시작을 눌렀을 때 뜨는 모달 */}
+      {meetInviteModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 mx-4">
+            <h3 className="text-lg font-semibold mb-3">
+              동행 시작 알림
+            </h3>
+            <p className="text-sm text-gray-700 mb-2">
+              <b>{meetInviteModal.startedByNickname}</b>님이 동행 시작을 요청했어요.
+            </p>
+            <p className="text-xs text-gray-600 mb-4">
+              10분 안에 동행을 시작하면 여행이 확정됩니다.
+              <br />
+              현재 남은 시간:{' '}
+              <span className="font-mono font-semibold text-red-600">
+                {formatCountdown(meetCountdownSec)}
+              </span>
+            </p>
+
+            <div className="flex justify-end gap-2 text-sm">
+              <button
+                onClick={onSnoozeMeetFromModal}
+                className="px-4 py-2 rounded-lg border bg-gray-50 hover:bg-gray-100"
+              >
+                나중에
+              </button>
+              <button
+                onClick={onAcceptMeetFromModal}
+                className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700"
+              >
+                지금 동행 시작하기
               </button>
             </div>
           </div>

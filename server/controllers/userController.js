@@ -17,6 +17,7 @@ exports.updateMe = async (req, res) => {
   const file = req.file; // avatar
 
   const avatarUrl = file ? `/uploads/avatars/${file.filename}` : null;
+  let conn;
 
   try {
     const conn = await db.getConnection();
@@ -78,12 +79,41 @@ exports.updateMe = async (req, res) => {
       await conn.query(sql, params);
     }
 
+    // ✅ 최종 프로필 다시 조회해서 avatarUrl, nickname 포함해 응답
+    const [[u]] = await conn.query(
+      `SELECT id, email, nickname, role,
+              created_at,
+              avatar_url,
+              bio,
+              kakao_id,
+              email_verified,
+              CASE WHEN password IS NULL OR password = '' THEN 0 ELSE 1 END AS has_password
+       FROM users
+       WHERE id = ?`,
+      [id]
+    );
+
     conn.release();
-    return res.json({ message: '프로필 저장 완료' });
+
+    return res.json({
+      message: '프로필 저장 완료',
+      id: u.id,
+      email: u.email,
+      nickname: u.nickname,
+      role: u.role,
+      created_at: u.created_at,
+      avatarUrl: u.avatar_url || '',
+      bio: u.bio || '',
+      kakaoId: u.kakao_id || null,
+      emailVerified: !!u.email_verified,
+      has_password: u.has_password,
+    });
   } catch (e) {
     console.error(e);
+    if (conn) conn.release();
     return res.status(500).json({ error: '프로필 저장 실패' });
   }
+
 };
 
 /**
@@ -173,7 +203,9 @@ exports.getMe = async (req, res) => {
         role,
         avatar_url,
         bio,
-        created_at
+        created_at,
+        email_verified,
+        CASE WHEN password IS NULL OR password = '' THEN 0 ELSE 1 END AS has_password
       FROM users
       WHERE id = ?
       `,
@@ -184,8 +216,20 @@ exports.getMe = async (req, res) => {
       return res.status(404).json({ error: 'USER_NOT_FOUND' });
     }
 
-    // 클라이언트에서 그대로 쓰기 편하게 내려줌
-    return res.json(rows[0]);
+    const u = rows[0];
+
+    // ✅ 프론트에서 쓰기 좋은 camelCase 형태로 내려보내기
+    return res.json({
+      id: u.id,
+      email: u.email,
+      nickname: u.nickname,
+      role: u.role,
+      avatarUrl: u.avatar_url || '',
+      bio: u.bio || '',
+      created_at: u.created_at,
+      emailVerified: !!u.email_verified,
+      has_password: u.has_password,
+    });
   } catch (e) {
     console.error('[/api/users/me] DB error:', e);
     return res.status(500).json({ error: '프로필 로드 실패' });
