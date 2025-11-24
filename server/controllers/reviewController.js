@@ -22,6 +22,21 @@ exports.createOrUpdate = async (req, res) => {
       conn.release(); return res.status(403).json({ error: '이 trip에 대한 리뷰 권한이 없습니다.' });
     }
     if (!t.met_at) { conn.release(); return res.status(400).json({ error: '동행이 확정된 trip만 후기 작성 가능' }); }
+    
+
+    // 🔴 여행 종료 여부 체크: end_date 하루가 완전히 지난 뒤부터 후기 작성 가능
+    if (t.end_date) {
+      const now = new Date();
+      const end = new Date(t.end_date);
+      end.setHours(23, 59, 59, 999); // end_date의 끝
+
+      if (now <= end) {
+        conn.release();
+        return res
+          .status(400)
+          .json({ error: '여행이 끝난 뒤에만 후기를 작성할 수 있습니다.' });
+      }
+    }
 
     // upsert (reviewer_id, target_id, trip_id) 유니크
     await conn.query(

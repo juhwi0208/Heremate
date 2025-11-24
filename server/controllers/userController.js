@@ -4,6 +4,8 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const db = require('../db');
+const trust = require('../services/trustService');
+
 
 
 // PUT /api/users/me (multipart)  → 이메일 변경 지원
@@ -238,103 +240,181 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// GET /api/users/:id/trust  → 개요 카드 + 별자리 그래프 데이터
+
+// GET /api/users/:id/trust  → 신뢰 지표 + 후기 키워드
+exports.getTrustProfile = async (req, res) => {
+  const targetId = Number(req.params.id);
+  if (!targetId) {
+    return res.status(400).json({ error: '잘못된 사용자 ID 입니다.' });
+  }
+
+  try {
+    const profile = await trust.getUserTrustProfile(targetId);
+    if (!profile) {
+      return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+    }
+    return res.json(profile);
+  } catch (e) {
+    console.error('GET /api/users/:id/trust error', e);
+    return res.status(500).json({ error: '신뢰 지표 조회 실패' });
+  }
+};
+
+
+// GET /api/users/:id/trust  → 아우라 + 별자리 + 후기 키워드
 exports.getTrust = async (req, res) => {
-  const id = Number(req.params.id);
-  if (!id) return res.status(400).json({ error: 'id가 필요합니다.' });
+  const targetId = Number(req.params.id || 0);
+  if (!targetId) {
+    return res.status(400).json({ error: '잘못된 사용자 id' });
+  }
 
   const conn = await db.getConnection();
   try {
-    // 요약지표(뷰가 있으면 그걸 사용)
-    let summary = { positive_ratio: 0, unique_partners: 0, trips_total: 0 };
-    try {
-      const [v] = await conn.query('SELECT * FROM user_trust_summary WHERE user_id=?', [id]);
-      if (v?.length) {
-        summary = {
-          positive_ratio: Number(v[0].positive_ratio || 0),
-          unique_partners: Number(v[0].unique_partners || 0),
-          trips_total: Number(v[0].trips_total || 0),
-        };
-      } else {
-        // 뷰 미존재 시 fallback
-        const [[r0]] = await conn.query(
-          `SELECT SUM(CASE WHEN emotion='positive' THEN 1 ELSE 0 END)/NULLIF(COUNT(*),0) AS pr
-             FROM reviews WHERE target_id=?`, [id]);
-        const [[r1]] = await conn.query(
-          `SELECT COUNT(DISTINCT partner_id) AS up, COALESCE(SUM(trips_count),0) AS tt
-             FROM travel_relations WHERE user_id=?`, [id]);
-        summary = {
-          positive_ratio: Number(r0?.pr || 0),
-          unique_partners: Number(r1?.up || 0),
-          trips_total: Number(r1?.tt || 0),
-        };
-      }
-    } catch {}
-
-    // 전체 리뷰 개수
-    const [[reviewRow]] = await conn.query(
-      `SELECT COUNT(*) AS cnt FROM reviews WHERE target_id=?`,
-      [id]
-    );
-    const reviewCount = Number(reviewRow.cnt || 0);
-
-    // 긍정 비율 (positive_ratio는 0~1이므로 %로 변환)
-    const positivePercent = Math.round((summary.positive_ratio || 0) * 100);
-
-    // 상위 키워드(간단 집계)
-    const [tagsRows] = await conn.query(
-      `SELECT tags FROM reviews WHERE target_id=? AND tags IS NOT NULL LIMIT 200`,
-      [id]
-    );
-    const freq = {};
-    for (const row of tagsRows) {
-      try {
-        const arr = JSON.parse(row.tags);
-        if (Array.isArray(arr)) arr.forEach(t => {
-          const k = String(t).trim(); if (!k) return;
-          freq[k] = (freq[k] || 0) + 1;
-        });
-      } catch {}
-    }
-    const topTags = Object.entries(freq)
-      .sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k])=>k);
-
-    // 별자리 그래프 데이터 (상위 12명)
-    const [rels] = await conn.query(
-      `SELECT partner_id AS id, relation_strength AS w
-         FROM travel_relations
-        WHERE user_id=?
-        ORDER BY w DESC
-        LIMIT 12`,
-      [id]
-    );
-    const nodes = rels.map(r => ({ id: r.id, weight: Number(r.w || 0) }));
-    const edges = rels.map(r => ({ source: id, target: r.id, weight: Number(r.w || 0) }));
-
-    // 아우라/별자리 캐시
+    // 1) 대상 유저 기본 정보 + 캐시된 점수
     const [[u]] = await conn.query(
-      `SELECT aura_tone, aura_intensity, aura_score, constellation_score FROM users WHERE id=?`,
-      [id]
+      `SELECT id, nickname, avatar_url,
+              aura_tone, aura_intensity, aura_score,
+              constellation_score
+         FROM users
+        WHERE id = ?`,
+      [targetId]
     );
+    if (!u) {
+      conn.release();
+      return res.status(404).json({ error: '사용자 없음' });
+    }
+
+    // 2) 관계/여행 요약 (uniquePartners, trips, positiveRatio)
+    const [[agg]] = await conn.query(
+      `SELECT 
+          COUNT(DISTINCT partner_id) AS uniquePartners,
+          COALESCE(SUM(trips_count),0) AS trips,
+          AVG(NULLIF(pos_ratio,0))       AS positiveRatio
+        FROM travel_relations
+        WHERE user_id = ?
+          AND trips_count > 0`,
+      [targetId]
+    );
+
+    const uniquePartners = Number(agg?.uniquePartners || 0);
+    const trips = Number(agg?.trips || 0);
+    const positiveRatio = agg?.positiveRatio != null
+      ? Number(agg.positiveRatio)
+      : null;
+
+    // 3) 별자리 그래프용 파트너 목록 (상위 12명)
+    const [rels] = await conn.query(
+      `SELECT 
+          tr.partner_id,
+          tr.trips_count,
+          tr.relation_strength,
+          tr.pos_ratio,
+          u2.nickname
+         FROM travel_relations tr
+         JOIN users u2 ON u2.id = tr.partner_id
+        WHERE tr.user_id = ?
+          AND tr.trips_count > 0   
+        ORDER BY tr.relation_strength DESC
+        LIMIT 12`,
+      [targetId]
+    );
+
+    const partnerNodes = rels.map((r) => {
+      const strength = Number(r.relation_strength || 0);
+      const weight = Math.max(0.3, Math.min(1, strength || 0.5));
+      return {
+        id: r.partner_id,
+        label: r.nickname,
+        weight,
+        trips: Number(r.trips_count || 1),
+      };
+    });
+
+    const edges = partnerNodes.map((n) => ({
+      source: targetId,
+      target: n.id,
+      weight: n.weight,
+    }));
+
+    // 4) 후기 키워드(topTags) 집계
+
+  const [reviewRows] = await conn.query(
+    `SELECT emotion, tags 
+      FROM reviews 
+      WHERE target_id = ?`,
+    [targetId]
+  );
+
+  const tagCountMap = {};
+  for (const r of reviewRows) {
+    if (!r.tags) continue;
+
+    let arr = null;
+
+    // 1) 🔥 JSON 컬럼이면 이미 Array로 옴
+    if (Array.isArray(r.tags)) {
+      arr = r.tags;
+    }
+    // 2) 문자열인 경우 (TEXT, VARCHAR 저장 등)
+    else if (typeof r.tags === "string") {
+      try {
+        const parsed = JSON.parse(r.tags);  // '[...]' 형태
+        if (Array.isArray(parsed)) {
+          arr = parsed;
+        }
+      } catch (e) {
+        // CSV Fallback ('tag1,tag2')
+        arr = r.tags
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    } else {
+      continue;
+    }
+
+    if (!arr || !arr.length) continue;
+
+    for (const t of arr) {
+      if (typeof t !== "string") continue;
+      const key = t.trim();
+      if (!key) continue;
+      tagCountMap[key] = (tagCountMap[key] || 0) + 1;
+    }
+  }
+
+  // 사용량 기준 상위 10개 키워드만 노출
+  const topTags = Object.entries(tagCountMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([tag]) => tag);
+    // 5) 레벨/점수 계산 (users.constellation_score 기반)
+    const rawScore = Number(u.constellation_score || 0);
+    const level = Math.max(1, 1 + Math.floor(rawScore / 20));
 
     conn.release();
+
     return res.json({
-      aura: u ? { tone: u.aura_tone, intensity: u.aura_intensity, score: u.aura_score } : null,
-      constellation: {
-        score: u ? u.constellation_score : 0,
-        level: (u?.constellation_score>=80?5:u?.constellation_score>=60?4:u?.constellation_score>=40?3:u?.constellation_score>=20?2:1),
-        nodes, edges,
-        uniquePartners: summary.unique_partners,
-        trips: summary.trips_total,
-        positiveRatio: summary.positive_ratio,
+      aura: {
+        tone: u.aura_tone,
+        intensity: u.aura_intensity,
+        score: Number(u.aura_score || 0),
       },
+      constellation: {
+        level,
+        score: rawScore,
+        uniquePartners,
+        trips,
+        positiveRatio,
+        nodes: partnerNodes,
+        edges,
+      },
+      // 🔥 프로필 신뢰 페이지에서 쓰는 후기 키워드
       topTags,
-      reviewCount,           
-      positivePercent 
     });
   } catch (e) {
-    try { conn.release(); } catch {}
-    console.error('getTrust error', e);
-    return res.status(500).json({ error: '신뢰 지표 로드 실패' });
+    console.error(e);
+    conn.release();
+    return res.status(500).json({ error: '신뢰도 조회 실패' });
   }
 };

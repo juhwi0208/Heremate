@@ -17,6 +17,34 @@ import ReviewModal from '../features/review/ReviewModal';
 import ReportModal from '../features/report/ReportModal';
 import { Camera, Lock, ChevronRight } from 'lucide-react';
 
+// 후기 태그 라벨 매핑 (ProfileTrust 화면에서 표시용)
+const TAG_LABELS = {
+  // negative
+  noshow: '약속 장소/시간을 지키지 않았어요',
+  rude: '말투/태도가 무례했어요',
+  unsafe: '불안하거나 위험한 행동을 했어요',
+  dirty: '위생/청결이 많이 아쉬웠어요',
+  money: '비용 관련 갈등이 있었어요',
+  schedule: '일정을 마음대로 바꾸었어요',
+  etc: '기타 아쉬운 점이 있었어요',
+
+  // neutral
+  quiet: '조용해서 대화가 많이 없었어요',
+  preference_diff: '여행 스타일이 조금 안 맞았어요',
+  late_small: '약속에 약간 늦는 편이었어요',
+  photo_only: '사진 위주로 움직였어요',
+  separate: '각자 따로 움직이는 시간이 많았어요',
+
+  // positive
+  kind: '매너가 좋고 친절했어요',
+  talk: '대화가 잘 통했어요',
+  plan: '일정/예산 조율을 잘했어요',
+  photo: '사진을 잘 찍어줬어요',
+  food: '맛집을 잘 찾아줬어요',
+  on_time: '시간 약속을 잘 지켰어요',
+  again: '다음에 또 같이 가고 싶어요',
+};
+
 const API_BASE =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
   process.env.REACT_APP_API_BASE_URL ||
@@ -63,43 +91,29 @@ function fmtKoreanDate(iso) {
     day: '2-digit',
   });
 }
-/* 아우라 링 그라데이션 스타일 */
+
+/* 아우라 링 그라데이션 스타일 – UserTrustPreview와 동일하게 */
 function auraRingStyle(aura) {
-  if (!aura) {
-    // 기본(뉴트럴) 컬러
-    return {
-      background:
-        'radial-gradient(circle, rgba(148,163,184,0.9) 0%, rgba(148,163,184,0.3) 60%, rgba(148,163,184,0) 100%)',
-    };
-  }
+  const tone = aura?.tone || 'neutral';
 
-  const tone = aura.tone || 'neutral';
-  const intensityRaw = aura.intensity ?? 0.6;
-  const intensity = Math.max(0.25, Math.min(1, intensityRaw));
-
-  let rgb;
   switch (tone) {
     case 'warm':
-      // 따뜻한 오렌지/핑크
-      rgb = '255,184,108';
-      break;
+      return {
+        background:
+          'radial-gradient(circle, rgba(250,204,21,0.9) 0%, rgba(250,204,21,0) 70%)',
+      };
     case 'cool':
-      // 차가운 블루/시안
-      rgb = '96,165,250';
-      break;
+      return {
+        background:
+          'radial-gradient(circle, rgba(56,189,248,0.9) 0%, rgba(56,189,248,0) 70%)',
+      };
     default:
-      // 중립 민트/에메랄드
-      rgb = '45,212,191';
-      break;
+      // neutral / 그 외
+      return {
+        background:
+          'radial-gradient(circle, rgba(52,211,153,0.9) 0%, rgba(52,211,153,0) 70%)',
+      };
   }
-
-  // 중심은 진하게, 바깥은 옅어지게
-  const innerA = 0.7 + 0.3 * intensity; // 0.7~1.0
-  const midA = 0.25 * intensity;        // 0.06~0.25
-
-  return {
-    background: `radial-gradient(circle, rgba(${rgb},${innerA}) 0%, rgba(${rgb},${midA}) 60%, rgba(${rgb},0) 100%)`,
-  };
 }
 /* ------------------ 메인 컴포넌트 ------------------ */
 
@@ -461,7 +475,7 @@ export default function ProfileTrust({ setUser }) {
               <div className="shrink-0">
                 {/* ✅ 오로라 그라데이션 링 */}
                 <div
-                  className="w-24 h-24 rounded-full p-[3px]"
+                  className="w-28 h-28 rounded-full p-[20px]"
                   style={auraRingStyle(trust.aura)}
                 >
                   <div className="w-full h-full rounded-full bg-white overflow-hidden flex items-center justify-center">
@@ -580,12 +594,31 @@ export default function ProfileTrust({ setUser }) {
           </div>
         </div>
 
-        {/* 후기 키워드 블럭 */}
-        <div className="rounded-2xl bg-white shadow-sm p-6 space-y-3">
-          <div className="text-sm font-semibold text-zinc-900">후기 키워드</div>
-          <div className="rounded-xl bg-[#F5F5F7] p-4">
-            <TagChips tags={trust.topTags} />
+        {/* ===== 후기 키워드 ===== */}
+        <div className="rounded-2xl bg-white shadow-sm p-4 space-y-4">
+        {Array.isArray(trust.topTags) && trust.topTags.length > 0 ? (
+          <div className="mt-1">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">
+              가장 많이 받은 키워드
+            </h3>
+            <div className="rounded-xl bg-[#F5F5F7] p-4">
+              <div className="flex flex-wrap gap-2">
+                {trust.topTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-3 py-1 text-xs rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  >
+                    {TAG_LABELS[tag] || tag}
+                  </span> 
+                ))}
+              </div>
+            </div>
           </div>
+        ) : (
+          <div className="mt-4 text-xs text-gray-400">
+            아직 받은 후기 키워드가 없습니다.
+          </div>
+        )}
         </div>
 
         {/* 활동 현황 블럭 (실제 데이터 반영) */}

@@ -144,9 +144,110 @@ async function onTripUpdate(userA, userB, tripId) {
   await Promise.all([recalcUserTrust(userA), recalcUserTrust(userB)]);
 }
 
+// ✅ 공개: 마이페이지 신뢰 지표 + 후기 키워드 조회
+// 후기, 아우라, 별자리, 후기 키워드까지 한 번에 내려주는 프로필 조회
+async function getUserTrustProfile(userId) {
+  // 1) users 요약 정보
+  const [[summary]] = await db.query(
+    `
+    SELECT 
+      aura_tone,
+      aura_intensity,
+      aura_score,
+      constellation_score,
+      warnings_count,
+      trip_count,
+      positive_trip_count
+    FROM users
+    WHERE id = ?
+    `,
+    [userId]
+  );
+
+  // 2) 리뷰 감정 집계
+  const [[reviewAgg]] = await db.query(
+    `
+    SELECT
+      COUNT(*) AS reviewCount,
+      SUM(CASE WHEN emotion = 'positive' THEN 1 ELSE 0 END) AS positiveCount
+    FROM reviews
+    WHERE target_id = ?
+    `,
+    [userId]
+  );
+
+  // 3) 리뷰 키워드(tags) 집계
+  const [tagRows] = await db.query(
+    `
+    SELECT tags
+    FROM reviews
+    WHERE target_id = ?
+      AND tags IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 200
+    `,
+    [userId]
+  );
+
+  const tagMap = new Map();
+
+  for (const row of tagRows) {
+    if (!row.tags) continue;
+
+    let list;
+    try {
+      // reviews.tags 컬럼에는 JSON 배열(string)로 저장되어 있음: ["시간 약속을 잘 지켰어요", ...]
+      list = typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags;
+    } catch (e) {
+      console.error('trustService: tags JSON 파싱 실패', row.tags, e);
+      continue;
+    }
+    if (!Array.isArray(list)) continue;
+
+    for (const tag of list) {
+      if (!tag || typeof tag !== 'string') continue;
+      const trimmed = tag.trim();
+      if (!trimmed) continue;
+      tagMap.set(trimmed, (tagMap.get(trimmed) || 0) + 1);
+    }
+  }
+
+  // count 순으로 정렬해서 상위 8개만 사용
+  const topTags = Array.from(tagMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([label, count]) => ({
+      label,
+      count,
+    }));
+
+  const reviewCount = reviewAgg?.reviewCount || 0;
+  const positivePercent =
+    reviewCount > 0
+      ? Math.round(((reviewAgg.positiveCount || 0) / reviewCount) * 100)
+      : 0;
+
+  return {
+    auraTone: summary?.aura_tone || 'neutral',
+    auraIntensity: summary?.aura_intensity || 0,
+    auraScore: summary?.aura_score || 0,
+    constellationScore: summary?.constellation_score || 0,
+    warningsCount: summary?.warnings_count || 0,
+    tripCount: summary?.trip_count || 0,
+    positiveTripCount: summary?.positive_trip_count || 0,
+
+    reviewCount,
+    positivePercent,
+
+    // 마이페이지 “후기 키워드”에서 쓸 값
+    topTags, // [{ label: '시간 약속을 잘 지켰어요', count: 3 }, ...]
+  };
+}
+
 module.exports = {
   recalcUserTrust,
   onReviewUpsert,
   onWarning,
   onTripUpdate,
+  getUserTrustProfile,
 };

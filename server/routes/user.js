@@ -25,10 +25,14 @@ const upload = multer({ storage });
 router.get('/me', verifyToken, ctrl.getMe);
 router.put('/me', verifyToken, upload.single('avatar'), ctrl.updateMe);
 router.delete('/me', verifyToken, ctrl.deleteMe); // 🟢 Added
-router.get('/me', verifyToken, ctrl.getMe);
-router.put('/me', verifyToken, upload.single('avatar'), ctrl.updateMe);
-router.delete('/me', verifyToken, ctrl.deleteMe);
-// 🆕 신뢰 지표
+
+//router.get('/me', verifyToken, ctrl.getMe);
+//router.put('/me', verifyToken, upload.single('avatar'), ctrl.updateMe);
+//router.delete('/me', verifyToken, ctrl.deleteMe);
+
+// ✅ 프로필 신뢰(별자리) 조회
 router.get('/:id/trust', verifyToken, ctrl.getTrust);
+router.get('/:id/trust/profile', verifyToken, ctrl.getTrustProfile);
+
 
 module.exports = router;

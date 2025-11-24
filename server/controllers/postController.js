@@ -161,13 +161,33 @@ exports.updatePost = async (req, res) => {
 
 exports.deletePost = async (req, res) => {
   const { id } = req.params;
+  const userId = req.user?.id; // verifyToken 에서 넣어준 사용자 id
+
+  if (!userId) {
+    return res.status(401).json({ error: '로그인이 필요합니다.' });
+  }
+
   try {
     const conn = await db.getConnection();
-    await conn.query('DELETE FROM posts WHERE id = ?', [id]);
+
+    // 내가 쓴 글만 삭제되도록 writer_id까지 함께 조건으로 건다
+    const [result] = await conn.query(
+      'DELETE FROM posts WHERE id = ? AND writer_id = ?',
+      [id, userId]
+    );
+
     conn.release();
-    res.json({ message: '게시글 삭제 성공' });
+
+    if (result.affectedRows === 0) {
+      // 1) 글이 이미 없거나  2) 내가 쓴 글이 아닌 경우
+      return res
+        .status(404)
+        .json({ error: '게시글을 찾을 수 없거나 삭제 권한이 없습니다.' });
+    }
+
+    return res.json({ message: '게시글 삭제 성공' });
   } catch (err) {
     console.error('게시글 삭제 실패:', err);
-    res.status(500).json({ error: '게시글 삭제 실패' });
+    return res.status(500).json({ error: '게시글 삭제 실패' });
   }
 };

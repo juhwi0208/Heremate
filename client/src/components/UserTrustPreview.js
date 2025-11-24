@@ -57,7 +57,7 @@ export default function UserTrustPreview({
         {/* 아우라 링 */}
         <div className="relative h-14 w-14 shrink-0">
           <div
-            className="pointer-events-none absolute inset-[-8px] rounded-full opacity-90"
+            className="pointer-events-none absolute inset-[-13px] rounded-full opacity-90"
             style={{ background: getAuraGradient(auraColor) }}
           />
           <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border-[2px] border-white bg-gray-100 shadow-md">

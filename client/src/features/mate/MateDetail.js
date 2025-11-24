@@ -48,7 +48,7 @@ export default function MateDetail() {
 
   const [post, setPost] = useState(null);
   const [me, setMe] = useState(null);
-  
+  const [writerTrust, setWriterTrust] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -56,11 +56,15 @@ export default function MateDetail() {
       try {
         const [p, u] = await Promise.allSettled([
           axios.get(`/api/posts/${id}`),
-          axios.get('/auth/me'),
+          axios.get('/api/users/me'),      // ✅ 이걸로 교체
         ]);
         if (!mounted) return;
         if (p.status === 'fulfilled') setPost(p.value.data);
-        if (u.status === 'fulfilled') setMe(u.value.data);
+        if (u.status === 'fulfilled') {
+          console.log("🔥 /auth/me 응답:", u.value.data);  
+          setMe(u.value.data);
+        }
+          
       } catch {}
     })();
     return () => {
@@ -68,7 +72,38 @@ export default function MateDetail() {
     };
   }, [id]);
 
-  const mine = me && post && me.id === post.writer_id;
+  // ✅ 작성자 아우라/신뢰 정보 로딩
+  useEffect(() => {
+    if (!post?.writer_id) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data } = await axios.get(`/api/users/${post.writer_id}/trust`);
+        if (!cancelled) {
+          setWriterTrust(data || null);
+        }
+      } catch (e) {
+        console.error('writer trust load error', e);
+        if (!cancelled) setWriterTrust(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [post?.writer_id]);
+  
+
+    // 내 아이디 / 작성자 아이디 비교
+  const myId = me?.id ?? me?.userId ?? me?.user?.id ?? null;
+  const writerId = post?.writer_id ?? post?.writerId ?? null;
+
+  const mine =
+    myId != null &&
+    writerId != null &&
+    Number(myId) === Number(writerId);
 
   const styles = useMemo(() => {
     if (!post) return [];
@@ -188,6 +223,20 @@ export default function MateDetail() {
                 avatarUrl={toAbs(post.avatarUrl)}
                 joinedAt={post.writer_joined_at}
                 travelCount={post.writer_travel_count}
+                trustSummary={
+                  writerTrust
+                    ? {
+                        // ✅ 아우라 점수/색/라벨
+                        auraScore: writerTrust.aura?.score ?? 0,
+                        auraColor: writerTrust.aura?.tone ?? 'neutral',
+                        label: writerTrust.aura?.label ?? undefined,
+
+                        // ✅ 동행 횟수 / 긍정 비율도 있으면 같이 사용
+                        tripCount: writerTrust.constellation?.trips ?? 0,
+                        positiveRate: writerTrust.positivePercent ?? 0,
+                      }
+                    : undefined
+                }
               />
             </div>
 

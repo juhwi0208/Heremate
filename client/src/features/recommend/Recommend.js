@@ -1,11 +1,12 @@
 // client/src/features/recommend/Recommend.js
-// Recommend 후보 썸네일 안정화 (기능/UI 동일 유지)
-//  - v1 전용 후보: 서버 디테일 → (사진 없으면) JS TextSearch로 place_id 역추적
-//  - 렌더링 캐시 키 우선순위: id_v1 → place_id
-//  - 사진 추출: getURI → getUrl → getURL 순
+// PlanEditor와 동일한 UsePlacesAutocomplete 파이프라인 + photoName 프록시 사용
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
+import CountryCitySelect from '../../components/CountryCitySelect';
+import TravelRegions from '../../data/TravelRegions';
+import { buildPhotoProxyURL } from '../../lib/PlacesId';
+import UsePlacesAutocomplete from '../../lib/UsePlacesAutocomplete';
 
 const GOOGLE_LIBRARIES = ['places', 'marker'];
 
@@ -21,53 +22,79 @@ function normalizeOpeningHours(src) {
       return `${h}${m}`;
     };
     const periods = (base?.periods || []).map((p) => ({
-      open:  p.open  ? { day: p.open.day,  time: toHHMM(p.open)  } : undefined,
+      open: p.open ? { day: p.open.day, time: toHHMM(p.open) } : undefined,
       close: p.close ? { day: p.close.day, time: toHHMM(p.close) } : undefined,
     }));
-    return periods.length ? { periods } : null;
-  } catch { return null; }
+    return {
+      weekdayDescriptions: base.weekdayDescriptions || [],
+      periods,
+    };
+  } catch {
+    return null;
+  }
 }
 
-function summarizeTodayHours(openingHours) {
-  try {
-    if (!openingHours?.periods?.length) return null;
-    const wd = new Date().getDay(); // 0=Sun
-    const today = openingHours.periods
-      .filter((p) => {
-        const od = p.open?.day;
-        const cd = p.close?.day ?? od;
-        return od === wd || cd === wd || (od <= wd && wd <= cd);
-      })
-      .map((p) => {
-        const fmt = (t) => `${t.slice(0,2)}:${t.slice(2)}`;
-        const ot = p.open?.time || '0000';
-        const ct = p.close?.time || '2400';
-        return `${fmt(ot)}–${fmt(ct)}`;
-      });
-    return today.length ? `오늘 영업: ${today.join(', ')}` : null;
-  } catch { return null; }
-}
+const defaultCenter = { lat: 37.5665, lng: 126.9780 }; // 서울
 
 export default function Recommend() {
   const [mapCenter, setMapCenter] = useState({ lat: 37.5665, lng: 126.9780 });
   const [mapZoom, setMapZoom] = useState(12);
 
+  // 여행 지역(PlanEditor와 동일한 구조)
+  const [country, setCountry] = useState('');
+  const [region, setRegion] = useState('');
+
+  // 선택한 나라/도시를 기반으로 검색 중심 좌표 계산
+  const selectedCoords = useMemo(() => {
+    if (!country) return null;
+
+    const c = TravelRegions.find(
+      (v) =>
+        v.code === country ||
+        v.name?.ko === country ||
+        v.name?.en === country
+    );
+    if (!c) return null;
+
+    // 도시까지 선택한 경우
+    if (region && Array.isArray(c.cities)) {
+      const city = c.cities.find(
+        (ci) => ci.ko === region || ci.en === region
+      );
+      if (city && Number.isFinite(city.lat) && Number.isFinite(city.lng)) {
+        return { lat: city.lat, lng: city.lng, radius: 50000 };
+      }
+    }
+
+    // 나라만 선택한 경우
+    if (Number.isFinite(c.lat) && Number.isFinite(c.lng)) {
+      return { lat: c.lat, lng: c.lng, radius: 120000 };
+    }
+
+    // 안전망: 서울
+    return { ...defaultCenter, radius: 120000 };
+  }, [country, region]);
+
+  // 선택 지역이 바뀌면 지도 중심도 같이 이동
+  useEffect(() => {
+    if (!selectedCoords) return;
+    setMapCenter({ lat: selectedCoords.lat, lng: selectedCoords.lng });
+    setMapZoom(selectedCoords.radius <= 60000 ? 12 : 10);
+  }, [selectedCoords]);
+
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
     libraries: GOOGLE_LIBRARIES,
     version: 'weekly',
-    // language/region은 각 호출에서 'ko'/'KR'로 지정
   });
 
   const mapRef = useRef(null);
   const placesSvcRef = useRef(null);
-  const geocoderRef  = useRef(null);
-  const autocompleteRef = useRef(null);
-  const sessionTokenRef = useRef(null);
+  const geocoderRef = useRef(null);
 
   // 검색 상태/캐시
   const [mapSearch, setMapSearch] = useState('');
-  const [mapPreds, setMapPreds]   = useState([]); // [{ place_id?, id_v1?, main_text, secondary_text }]
+  const [mapPreds, setMapPreds] = useState([]); // [{ place_id?, id_v1?, main_text, secondary_text }]
   const [detailCache, setDetailCache] = useState({}); // { [id]: {title,address,openingHours,photoUrl} }
   const [tempPin, setTempPin] = useState(null);
 
@@ -75,19 +102,88 @@ export default function Recommend() {
     mapRef.current = m;
     if (window.google?.maps) {
       const anchor = m || document.createElement('div');
-      if (!placesSvcRef.current) placesSvcRef.current = new window.google.maps.places.PlacesService(anchor);
-      if (!geocoderRef.current)  geocoderRef.current  = new window.google.maps.Geocoder();
-      if (!autocompleteRef.current) autocompleteRef.current = new window.google.maps.places.AutocompleteService();
-      if (!sessionTokenRef.current) sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+      if (!placesSvcRef.current) {
+        placesSvcRef.current = new window.google.maps.places.PlacesService(
+          anchor
+        );
+      }
+      if (!geocoderRef.current) {
+        geocoderRef.current = new window.google.maps.Geocoder();
+      }
     }
   };
 
-  // 후보 바뀌면 상세(특히 사진) 채우기
+  // ✅ PlanEditor와 동일한 자동완성 훅 사용
+  const {
+    items: autoPredictions,
+    loading: autoLoading,
+    error: autoError,
+  } = UsePlacesAutocomplete({
+    query: mapSearch || '',
+    lat: selectedCoords?.lat,
+    lng: selectedCoords?.lng,
+    radius: selectedCoords?.radius || 50000,
+    language: 'ko',
+    region: 'KR',
+    minLength: 2,
+    debounceMs: 400,
+  });
+
+  // ✅ 자동완성 결과 → Recommend 전용 mapPreds 포맷으로 정규화
+  useEffect(() => {
+    if (!mapSearch || autoLoading || !Array.isArray(autoPredictions)) {
+      setMapPreds([]);
+      return;
+    }
+
+    const norm = autoPredictions.map((item, idx) => {
+      const placeId =
+        item.place_id ||
+        item.placeId ||
+        item.id ||
+        null;
+
+      const main =
+        item.structured_formatting?.main_text ||
+        item.main_text ||
+        item.primaryText ||
+        item.description ||
+        '';
+
+      const secondary =
+        item.structured_formatting?.secondary_text ||
+        item.secondary_text ||
+        item.secondaryText ||
+        '';
+
+      // v1 id 있으면 함께 보존
+      const id_v1 =
+        item.id_v1 ||
+        item.idV1 ||
+        (typeof item.id === 'string' && item.id.startsWith('places/')
+          ? item.id
+          : null);
+
+      return {
+        source: item.source || 'auto',
+        place_id: placeId,
+        id_v1,
+        main_text: main,
+        secondary_text: secondary,
+        _idx: idx,
+      };
+    });
+
+    setMapPreds(norm);
+  }, [mapSearch, autoPredictions, autoLoading]);
+
+  // ✅ PlanEditor와 동일한 방식으로 상세 + 썸네일 채우기
   useEffect(() => {
     const Place = window.google?.maps?.places?.Place;
+    const placesSvc = placesSvcRef.current;
 
-    const byPid = mapPreds.filter((p) => p.place_id);
-    const byV1  = mapPreds.filter((p) => p.id_v1 && !p.place_id); // v1만 가진 후보
+    const byPid = mapPreds.filter((p) => p.place_id); // place_id 가진 후보
+    const byV1 = mapPreds.filter((p) => p.id_v1 && !p.place_id); // v1만 가진 후보
 
     // 1) place_id 보유 후보: JS SDK → (실패 시) 서버 폴백
     byPid.forEach((item) => {
@@ -98,22 +194,43 @@ export default function Recommend() {
         // 1-A) 신형 Place.fetchFields()
         if (Place) {
           try {
-            const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-            const det   = await place.fetchFields({ fields: ['displayName','name','formattedAddress','regularOpeningHours','photos'] });
+            const place = new Place({
+              id: pid,
+              requestedLanguage: 'ko',
+              requestedRegion: 'KR',
+            });
+            const det = await place.fetchFields({
+              fields: [
+                'id',
+                'displayName',
+                'name',
+                'formattedAddress',
+                'regularOpeningHours',
+                'photos',
+                'location',
+              ],
+            });
             if (det) {
-              const ph = place.photos?.[0];
+              const ph = det.photos?.[0];
               let url = '';
               try {
-                if (ph?.getURI)      url = ph.getURI({ maxWidth: 400, maxHeight: 300 });
-                else if (ph?.getUrl) url = ph.getUrl({ maxWidth: 400, maxHeight: 300 });
-                else if (ph?.getURL) url = ph.getURL({ maxWidth: 400, maxHeight: 300 });
+                if (ph?.getURI)
+                  url = ph.getURI({ maxWidth: 400, maxHeight: 300 });
+                else if (ph?.getUrl)
+                  url = ph.getUrl({ maxWidth: 400, maxHeight: 300 });
+                else if (ph?.getURL)
+                  url = ph.getURL({ maxWidth: 400, maxHeight: 300 });
               } catch {}
               setDetailCache((prev) => ({
                 ...prev,
                 [pid]: {
-                  title: det?.displayName?.text || det?.name || item.main_text || '',
-                  address: det?.formattedAddress || item.secondary_text || '',
-                  openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
+                  title:
+                    det?.displayName?.text || det?.name || item.main_text || '',
+                  address:
+                    det?.formattedAddress || item.secondary_text || '',
+                  openingHours: normalizeOpeningHours(
+                    det?.regularOpeningHours || null
+                  ),
                   photoUrl: url || '',
                 },
               }));
@@ -124,26 +241,33 @@ export default function Recommend() {
 
         // 1-B) 서버 폴백
         try {
-          const resp = await fetch(`/api/places/details?id=${encodeURIComponent(pid)}`);
+          const resp = await fetch(
+            `/api/places/details?id=${encodeURIComponent(pid)}`
+          );
           if (resp.ok) {
             const det = await resp.json();
-            let photoUrl = det?.photoUrl || '';
-            // 서버 안전망: photos[0].name → v1 미디어 URL 직접 생성(프론트 키 사용)
-            if (!photoUrl && Array.isArray(det?.photos) && det.photos[0]?.name) {
-              const name = det.photos[0].name; // "places/.../photos/..."
-              const qs = new URLSearchParams({
-                maxWidth: '400',
-                maxHeight: '300',
-                key: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
+
+            // ✅ PlanEditor와 동일한 photoName → /api/places/photo 프록시 사용
+            let photoUrl = '';
+            if (det?.photoName) {
+              photoUrl = buildPhotoProxyURL({
+                name: det.photoName,
+                w: 400,
+                h: 300,
               });
-              photoUrl = `https://places.googleapis.com/v1/${encodeURIComponent(name)}/media?${qs.toString()}`;
+            } else if (det?.photoUrl) {
+              photoUrl = det.photoUrl;
             }
+
             setDetailCache((prev) => ({
               ...prev,
               [pid]: {
-                title: det?.displayName?.text || det?.name || item.main_text || '',
+                title:
+                  det?.displayName?.text || det?.name || item.main_text || '',
                 address: det?.formattedAddress || item.secondary_text || '',
-                openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
+                openingHours: normalizeOpeningHours(
+                  det?.regularOpeningHours || null
+                ),
                 photoUrl: photoUrl || '',
               },
             }));
@@ -160,17 +284,33 @@ export default function Recommend() {
       (async () => {
         // 2-A) 서버 디테일 먼저
         try {
-          const resp = await fetch(`/api/places/details?id=${encodeURIComponent(v1id)}`);
+          const resp = await fetch(
+            `/api/places/details?id=${encodeURIComponent(v1id)}`
+          );
           if (resp.ok) {
             const det = await resp.json();
-            const photoUrl = det?.photoUrl || '';
-            setDetailCache(prev => ({
+
+            let photoUrl = '';
+            if (det?.photoName) {
+              photoUrl = buildPhotoProxyURL({
+                name: det.photoName,
+                w: 400,
+                h: 300,
+              });
+            } else if (det?.photoUrl) {
+              photoUrl = det.photoUrl;
+            }
+
+            setDetailCache((prev) => ({
               ...prev,
               [v1id]: {
-                title: det?.displayName?.text || det?.name || item.main_text || '',
+                title:
+                  det?.displayName?.text || det?.name || item.main_text || '',
                 address: det?.formattedAddress || item.secondary_text || '',
-                openingHours: normalizeOpeningHours(det?.regularOpeningHours || null),
-                photoUrl,
+                openingHours: normalizeOpeningHours(
+                  det?.regularOpeningHours || null
+                ),
+                photoUrl: photoUrl || '',
               },
             }));
             if (photoUrl) return; // 서버가 사진까지 주면 종료
@@ -179,133 +319,93 @@ export default function Recommend() {
 
         // 2-B) 서버가 사진 못 줄 때: JS TextSearch → JS Place 사진
         const svc = placesSvcRef.current;
-        if (!svc || !Place) return;
-        const query = [item.main_text, item.secondary_text].filter(Boolean).join(' ');
-        svc.textSearch({ query, language: 'ko', region: 'KR' }, async (res, st) => {
-          if (st !== 'OK' || !Array.isArray(res) || !res.length) return;
-          const pid = res[0].place_id;
-          if (!pid) return;
-          try {
-            const place = new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' });
-            await place.fetchFields({ fields: ['displayName','name','formattedAddress','regularOpeningHours','photos'] });
-            const ph = place.photos?.[0];
-            let url = '';
-            try {
-              if (ph?.getURI)      url = ph.getURI({ maxWidth: 400, maxHeight: 300 });
-              else if (ph?.getUrl) url = ph.getUrl({ maxWidth: 400, maxHeight: 300 });
-              else if (ph?.getURL) url = ph.getURL({ maxWidth: 400, maxHeight: 300 });
-            } catch {}
-            setDetailCache(prev => ({
-              ...prev,
-              [v1id]: {
-                title: place.displayName?.text || place.name || item.main_text || '',
-                address: place.formattedAddress || item.secondary_text || '',
-                openingHours: normalizeOpeningHours(place.regularOpeningHours || null),
-                photoUrl: url || '',
+        if (!svc) return;
+
+        try {
+          const res = await new Promise((resolve) => {
+            svc.textSearch(
+              {
+                query: item.main_text || '',
+                language: 'ko',
+                region: 'KR',
               },
-            }));
-          } catch {}
-        });
+              (r, st) => {
+                if (
+                  st === 'OK' &&
+                  Array.isArray(r) &&
+                  r.length &&
+                  r[0]?.place_id
+                ) {
+                  resolve(r[0]);
+                } else {
+                  resolve(null);
+                }
+              }
+            );
+          });
+
+          if (res?.place_id) {
+            const pid = res.place_id;
+            const Place = window.google?.maps?.places?.Place;
+            if (Place) {
+              try {
+                const place = new Place({
+                  id: pid,
+                  requestedLanguage: 'ko',
+                  requestedRegion: 'KR',
+                });
+                const det = await place.fetchFields({
+                  fields: [
+                    'id',
+                    'displayName',
+                    'name',
+                    'formattedAddress',
+                    'regularOpeningHours',
+                    'photos',
+                    'location',
+                  ],
+                });
+                if (det) {
+                  const ph = det.photos?.[0];
+                  let url = '';
+                  try {
+                    if (ph?.getURI)
+                      url = ph.getURI({ maxWidth: 400, maxHeight: 300 });
+                    else if (ph?.getUrl)
+                      url = ph.getUrl({ maxWidth: 400, maxHeight: 300 });
+                    else if (ph?.getURL)
+                      url = ph.getURL({ maxWidth: 400, maxHeight: 300 });
+                  } catch {}
+                  setDetailCache((prev) => ({
+                    ...prev,
+                    [v1id]: {
+                      title:
+                        det?.displayName?.text ||
+                        det?.name ||
+                        item.main_text ||
+                        '',
+                      address:
+                        det?.formattedAddress || item.secondary_text || '',
+                      openingHours: normalizeOpeningHours(
+                        det?.regularOpeningHours || null
+                      ),
+                      photoUrl: url || '',
+                    },
+                  }));
+                }
+              } catch {}
+            }
+          }
+        } catch {}
       })();
     });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapPreds]);
 
-  // 후보 검색(AC → 서버 v1 → TextSearch → Geocode 순)
+  // ✅ 이제 fetchMapPreds는 그냥 검색어 state만 관리
   const fetchMapPreds = (q) => {
     setMapSearch(q);
-    if (!q) { setMapPreds([]); return; }
-
-    const ac  = autocompleteRef.current;
-    const svc = placesSvcRef.current;
-    const gc  = geocoderRef.current;
-    const token = sessionTokenRef.current;
-
-    const show = (list) => setMapPreds((list || []).slice(0, 20));
-
-    // 1) Autocomplete
-    const doAutocomplete = () => new Promise((resolve) => {
-      if (!ac) return resolve(false);
-      ac.getPlacePredictions({ input: q, language: 'ko', region: 'KR', sessionToken: token }, (list, status) => {
-        if (status === 'OK' && Array.isArray(list) && list.length) {
-          const normalized = list.map((p) => ({
-            source: 'ac',
-            place_id: p.place_id,
-            id_v1: null,
-            main_text: p.structured_formatting?.main_text || '',
-            secondary_text: p.structured_formatting?.secondary_text || '',
-          }));
-          show(normalized);
-          return resolve(true);
-        }
-        resolve(false);
-      });
-    });
-
-    // 2) 서버 v1 Search (id_v1를 받음)
-    const doServerSearch = async () => {
-      try {
-        const resp = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`);
-        if (!resp.ok) return false;
-        const json = await resp.json();
-        const preds = (json?.places || []).map((r) => ({
-          source: 'server',
-          place_id: r.placeId || r.place_id || null, // 있으면 사용
-          id_v1: r.id || null,                       // "places/XXXX"
-          main_text: r.displayName?.text || r.name || '',
-          secondary_text: r.formattedAddress || r.vicinity || '',
-        }));
-        if (preds.length) { show(preds); return true; }
-        return false;
-      } catch { return false; }
-    };
-
-    // 3) JS TextSearch
-    const doTextSearch = () => new Promise((resolve) => {
-      if (!svc?.textSearch) return resolve(false);
-      svc.textSearch({ query: q, language: 'ko', region: 'KR' }, (res, st) => {
-        if (st === 'OK' && Array.isArray(res) && res.length) {
-          const preds = res.map((r) => ({
-            source: 'js',
-            place_id: r.place_id || null,
-            id_v1: null,
-            main_text: r.name || '',
-            secondary_text: r.formatted_address || r.vicinity || '',
-          }));
-          show(preds);
-          return resolve(true);
-        }
-        resolve(false);
-      });
-    });
-
-    // 4) Geocode
-    const doGeocode = () => new Promise((resolve) => {
-      if (!gc) return resolve(false);
-      gc.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
-        if (st === 'OK' && Array.isArray(res) && res.length) {
-          const preds = res.map((r) => ({
-            source: 'gc',
-            place_id: r.place_id || null,
-            id_v1: null,
-            main_text: r.formatted_address || q,
-            secondary_text: '',
-          }));
-          show(preds);
-          return resolve(true);
-        }
-        resolve(false);
-      });
-    });
-
-    (async () => {
-      if (await doAutocomplete()) return;
-      if (await doServerSearch()) return;   // v1 결과 우선 수집(이후 역추적 폴백)
-      if (await doTextSearch())  return;
-      if (await doGeocode())     return;
-      setMapPreds([]);
-    })();
   };
 
   // 후보 클릭 시 지도 이동
@@ -315,67 +415,91 @@ export default function Recommend() {
 
     const pickLatLng = (loc) => {
       if (!loc) return null;
-      if (typeof loc.lat === 'function' && typeof loc.lng === 'function') return { lat: +loc.lat(), lng: +loc.lng() };
-      if (loc.latLng && typeof loc.latLng.lat === 'function') return { lat: +loc.latLng.lat(), lng: +loc.latLng.lng() };
-      if (typeof loc.lat === 'number' && typeof loc.lng === 'number') return { lat: +loc.lat, lng: +loc.lng };
+      if (
+        typeof loc.lat === 'function' &&
+        typeof loc.lng === 'function'
+      )
+        return { lat: +loc.lat(), lng: +loc.lng() };
+      if (loc.lat != null && loc.lng != null)
+        return { lat: +loc.lat, lng: +loc.lng };
       return null;
     };
 
-    // 1) JS Place
-    if (Place && pid) {
+    // 1) place_id가 있는 경우: Place/Geocode로 좌표 얻기
+    if (pid && Place) {
       try {
-        const det = await new Place({ id: pid, requestedLanguage: 'ko', requestedRegion: 'KR' })
-          .fetchFields({ fields: ['location'] });
+        const place = new Place({
+          id: pid,
+          requestedLanguage: 'ko',
+          requestedRegion: 'KR',
+        });
+        const det = await place.fetchFields({ fields: ['location'] });
         const pt = pickLatLng(det?.location);
-        if (pt) {
-          setMapCenter(pt); setMapZoom(15);
-          mapRef.current?.panTo(pt);
+        if (pt && mapRef.current) {
+          mapRef.current.panTo(pt);
           setTempPin(pt);
           return;
         }
       } catch {}
     }
 
-    // 2) 서버 디테일 폴백 (pid 또는 v1id)
-    const idForServer = pred?.id_v1 || pred?.place_id;
-    if (idForServer) {
+    // 2) Geocode 텍스트로 좌표 얻기
+    const gc = geocoderRef.current;
+    if (gc) {
       try {
-        const r = await fetch(`/api/places/details?id=${encodeURIComponent(idForServer)}`);
-        if (r.ok) {
-          const det = await r.json();
-          const pt = det?.location ? { lat: +det.location.latitude, lng: +det.location.longitude } : null;
-          if (pt) {
-            setMapCenter(pt); setMapZoom(15);
-            mapRef.current?.panTo(pt);
-            setTempPin(pt);
-            return;
-          }
+        const res = await new Promise((resolve) => {
+          gc.geocode(
+            {
+              address: pred.main_text || '',
+              language: 'ko',
+              region: 'KR',
+            },
+            (r, st) => {
+              if (
+                st === 'OK' &&
+                Array.isArray(r) &&
+                r.length &&
+                r[0]?.geometry?.location
+              )
+                resolve(r[0]);
+              else resolve(null);
+            }
+          );
+        });
+        const pt = pickLatLng(res?.geometry?.location);
+        if (pt && mapRef.current) {
+          mapRef.current.panTo(pt);
+          setTempPin(pt);
         }
       } catch {}
     }
-
-    // 3) Geocode 최후 수단
-    const q = pred?.main_text;
-    geocoderRef.current?.geocode({ address: q, language: 'ko', region: 'KR' }, (res, st) => {
-      if (st === 'OK' && res?.[0]?.geometry?.location) {
-        const loc = res[0].geometry.location;
-        const pt = { lat: +loc.lat(), lng: +loc.lng() };
-        setMapCenter(pt); setMapZoom(15);
-        mapRef.current?.panTo(pt);
-        setTempPin(pt);
-      }
-    });
   };
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+      {/* 여행 지역 선택 */}
+      <div className="mb-4">
+        <div className="text-xs mb-1">여행 지역</div>
+        <CountryCitySelect
+          country={country}
+          region={region}
+          onChangeCountry={(c) => {
+            setCountry(c);
+            setRegion('');
+          }}
+          onChangeRegion={(r) => setRegion(r)}
+        />
+      </div>
+
       {/* 검색 */}
       <div className="mb-4">
         <div className="text-xs mb-1">관광지/장소 검색</div>
         <input
           value={mapSearch}
           onChange={(e) => fetchMapPreds(e.target.value)}
-          onFocus={() => { /* 오버레이 열기 용도 */ }}
+          onFocus={() => {
+            /* 필요하면 세션 초기화 용도로 resetSession 같은 걸 사용할 수 있음 */
+          }}
           placeholder="예: 오사카 성, 도톤보리, 광안리 해수욕장…"
           className="w-full border rounded-lg px-3 py-2 text-sm"
         />
@@ -388,58 +512,96 @@ export default function Recommend() {
             {isLoaded ? (
               <GoogleMap
                 onLoad={onMapLoad}
-                onUnmount={() => { mapRef.current = null; }}
+                onUnmount={() => {
+                  mapRef.current = null;
+                }}
                 mapContainerStyle={{ width: '100%', height: '100%' }}
                 center={mapCenter}
                 zoom={mapZoom}
-                options={{ fullscreenControl:false, streetViewControl:false, mapTypeControl:false, zoomControl:true, gestureHandling:'greedy' }}
+                options={{
+                  streetViewControl: false,
+                  fullscreenControl: false,
+                  mapTypeControl: false,
+                  clickableIcons: false,
+                }}
               >
-                <Marker position={tempPin || mapCenter} />
+                {/* 임시 핀 */}
+                {tempPin && (
+                  <Marker
+                    position={tempPin}
+                    icon={{
+                      path: window.google?.maps?.SymbolPath?.CIRCLE,
+                      scale: 6,
+                      fillColor: '#10b981',
+                      fillOpacity: 1,
+                      strokeWeight: 2,
+                      strokeColor: '#ffffff',
+                    }}
+                  />
+                )}
               </GoogleMap>
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">구글맵 로드 중…</div>
+              <div className="w-full h-full flex items-center justify-center text-sm text-zinc-500">
+                지도를 불러오는 중…
+              </div>
             )}
           </div>
         </div>
 
-        {/* 후보 패널 */}
-        <aside className="md:col-span-1">
-          <div className="text-sm font-medium mb-2">검색 결과</div>
-          <div className="space-y-2">
-            {mapPreds.length === 0 && (
-              <div className="text-sm text-zinc-500 border rounded-lg p-3">검색어를 입력해보세요.</div>
-            )}
+        {/* 오른쪽 후보 리스트 */}
+        <aside className="border rounded-xl p-3 h-[520px] overflow-y-auto bg-white">
+          {mapPreds.length === 0 ? (
+            <div className="text-xs text-zinc-400">
+              검색어를 입력하면 추천 장소가 여기에 표시됩니다.
+            </div>
+          ) : (
+            <div className="text-xs text-zinc-500 mb-2">
+              검색 결과 {mapPreds.length}건
+            </div>
+          )}
 
-            {mapPreds.map((p) => {
-              // ✅ 캐시 키 우선순위: v1 id → place_id
-              const det = detailCache[p.id_v1] || detailCache[p.place_id] || {};
-              const placeName = det.title || p.main_text || '이름 없음';
-              const placeAddress = det.address || p.secondary_text || '';
+          <div className="space-y-3">
+            {mapPreds.map((p, idx) => {
+              const key = p.id_v1 || p.place_id || `row-${idx}`;
+              const detail = detailCache[p.id_v1 || p.place_id] || {};
+              const thumb = detail.photoUrl;
 
               return (
                 <button
-                  key={`${p.id_v1 || ''}_${p.place_id || ''}_${p.main_text}_${p.secondary_text}`}
+                  key={key}
+                  type="button"
                   onClick={() => panToPred(p)}
-                  className="w-full text-left border rounded-xl bg-white p-3 hover:bg-zinc-50 transition"
+                  className="w-full text-left"
                 >
-                  <div className="flex gap-3">
-                    {det.photoUrl ? (
-                      <img src={det.photoUrl} alt="thumb" className="w-14 h-14 rounded object-cover flex-none" />
-                    ) : (
-                      <div className="w-14 h-14 rounded bg-zinc-100 grid place-items-center text-[10px] text-zinc-400 flex-none">
-                        NO IMG
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{placeName}</div>
-                      <div className="text-xs text-zinc-500 truncate">{placeAddress}</div>
-                      {det.openingHours && (
-                        <div className="text-[11px] text-zinc-400 mt-1">
-                          {summarizeTodayHours(det.openingHours)}
+                  <div className="flex gap-3 p-2 rounded-lg hover:bg-zinc-50">
+                    <div className="w-20 h-20 rounded-md bg-zinc-100 overflow-hidden flex-shrink-0">
+                      {thumb ? (
+                        <img
+                          src={thumb}
+                          alt={detail.title || p.main_text}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-400">
+                          No Image
                         </div>
                       )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-zinc-900 truncate">
+                        {detail.title || p.main_text}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 truncate">
+                        {detail.address || p.secondary_text}
+                      </div>
+                      <div className="mt-1 text-[10px] text-zinc-400">
+                        {detail.openingHours?.weekdayDescriptions?.[0] ||
+                          '영업시간 정보 없음'}
+                      </div>
                       <div className="mt-2">
-                        <span className="inline-block text-[11px] px-2 py-1 rounded border">지도에서 보기</span>
+                        <span className="inline-block text-[11px] px-2 py-1 rounded border">
+                          지도에서 보기
+                        </span>
                       </div>
                     </div>
                   </div>

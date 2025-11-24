@@ -104,9 +104,11 @@ router.put('/rooms/:id/read', verifyToken, async (req, res) => {
 });
 
 
-// [GET] 내 방 목록 (+상대 프로필, 게시글 제목/지역/스타일, 읽지않음)
+
+// [GET] 내 방 목록 (+상대 프로필, 게시글 제목/지역/스타일, 읽지않음, trip 알림)
 router.get('/rooms', verifyToken, async (req, res) => {
   const me = req.user.id;
+
   try {
     const [rows] = await db.query(
       `
@@ -116,20 +118,54 @@ router.get('/rooms', verifyToken, async (req, res) => {
         r.user1_id,
         r.user2_id,
         r.created_at,
+
+        -- 상대 유저
         CASE WHEN r.user1_id = ? THEN r.user2_id ELSE r.user1_id END AS other_id,
         u.nickname       AS other_nickname,
         u.avatar_url     AS other_avatar_url,
-        -- "탈퇴회원%" 닉네임이면 메시지 비활성화
         CASE WHEN u.nickname LIKE '탈퇴회원%' THEN 0 ELSE 1 END AS other_active,
+
+        -- 연결된 메이트 게시글
         p.title          AS post_title,
         p.location       AS post_location,
         p.travel_style   AS post_style,
-        COALESCE(unread.cnt, 0) AS unread_count
+
+        -- 안 읽은 메시지 개수
+        COALESCE(unread.cnt, 0) AS unread_count,
+
+        -- 🔥 메이트 확정/동행 관련 강한 알림 여부
+        (
+          SELECT 
+            CASE 
+              WHEN COUNT(*) > 0 THEN 1
+              ELSE 0
+            END
+          FROM trips t
+          WHERE t.mate_post_id <=> r.post_id
+            AND (
+                  (t.user_a = r.user1_id AND t.user_b = r.user2_id)
+               OR (t.user_a = r.user2_id AND t.user_b = r.user1_id)
+                )
+            AND t.status IN (
+              'pending',      -- 메이트 확정 요청
+              'ready',        -- 여행 확정
+              'met',          -- 만남 완료
+              'meet_pending', -- 한 명이 동행 시작 버튼 누른 상태
+              'meet_waiting', -- 대기
+              'meet_button',  -- 버튼 프로토타입용
+              'meet_countdown'-- 카운트다운 진행 중
+            )
+        ) AS has_trip_alert
+
       FROM chat_rooms r
+
       JOIN users u
         ON u.id = CASE WHEN r.user1_id = ? THEN r.user2_id ELSE r.user1_id END
+
       LEFT JOIN posts p
         ON p.id = r.post_id
+
+      -- 안 읽은 메시지 서브쿼리
       LEFT JOIN (
         SELECT m.chat_room_id, COUNT(*) AS cnt
         FROM messages m
@@ -141,17 +177,22 @@ router.get('/rooms', verifyToken, async (req, res) => {
         GROUP BY m.chat_room_id
       ) AS unread
         ON unread.chat_room_id = r.id
+
       WHERE r.user1_id = ? OR r.user2_id = ?
+
       ORDER BY r.created_at DESC
       `,
+      // ? 순서: other_id, users join, unread 서브쿼리(2개), where(2개)
       [me, me, me, me, me, me]
     );
+
     res.json(rows);
   } catch (e) {
-    console.error(e);
+    console.error('GET /api/chats/rooms error:', e);
     res.status(500).json({ error: 'list rooms failed' });
   }
 });
+
 
 
 // [GET] 이 채팅방에 연결된 최신 trip + meetStatus
