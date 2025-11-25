@@ -22,22 +22,6 @@ const isTodayWithinTrip = (tripObj) => {
   return d >= startDay && d <= endDay;
 };
 
-
-// 🔹 여행 기간이 이미 끝났는지 확인 (오늘 > end_date 인지)
-const isAfterTrip = (tripObj) => {
-  if (!tripObj?.end_date) return false;
-  const today = new Date();
-  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const end = new Date(tripObj.end_date);
-  const endDay = new Date(
-    end.getFullYear(),
-    end.getMonth(),
-    end.getDate()
-  );
-  return d > endDay;
-};
-
-
 const formatKoreanDate = (iso) =>
   new Date(iso).toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -98,8 +82,6 @@ const REVIEW_TAGS_BY_EMOTION = {
     { key: 'again', label: '다음에 또 같이 가고 싶어요' },
   ],
 };
-
-
 
 export default function ChatRoom({
   roomIdOverride,
@@ -953,9 +935,6 @@ export default function ChatRoom({
     return '알림 켜짐';
   })();
 
-   // 🔹 여행 기간이 끝났는지 여부
-  const tripIsOver = isAfterTrip(trip);
-
   const canRestartMeet =
     meetPhase === 'expired' && isTodayWithinTrip(trip || {});
 
@@ -1094,13 +1073,22 @@ export default function ChatRoom({
                   <span className="text-emerald-900/80">
                     기간: {trip.start_date?.slice(0, 10)} ~ {trip.end_date?.slice(0, 10)}
                   </span>
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex flex-col items-end gap-1">
                     {meetPhase === 'idle' && (
                       <>
-                        <span className="text-[11px] text-emerald-700 hidden sm:inline">
-                          여행기간 동안 동행시작 버튼이 활성화됩니다.
-                        </span>
-                        {isTodayWithinTrip(trip) ? (
+                        {/* 두 줄 안내 문구 */}
+                        <div className="text-[11px] text-right leading-tight">
+                          <div className="text-emerald-700">
+                            여행기간 동안 동행시작 버튼이 활성화됩니다.
+                          </div>
+                          <div className="text-emerald-600">
+                            여행 당일에 둘 다 10분 이내로 &quot;동행 시작&quot;
+                            을 누르면 동행이 인증됩니다.
+                          </div>
+                        </div>
+
+                        {/* 버튼 (여행 기간일 때만) */}
+                        {isTodayWithinTrip(trip) && (
                           <button
                             type="button"
                             onClick={handleStartTogetherClick}
@@ -1109,21 +1097,8 @@ export default function ChatRoom({
                           >
                             {meetActionLoading ? '처리 중...' : '오늘 동행 시작하기'}
                           </button>
-                        ) : (
-                          <span className="text-[11px] text-emerald-600">
-                            여행 당일에 둘 다 10분 이내로 &quot;동행 시작&quot;을 누르면 동행이 인증됩니다.
-                          </span>
                         )}
                       </>
-                    )}
-
-                    {meetPhase === 'countdown' && (
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <span>동행 시작 확인 대기 중</span>
-                        <span className="font-mono font-semibold text-red-600">
-                          {formatCountdown(meetCountdownSec)}
-                        </span>
-                      </div>
                     )}
 
                     {meetPhase === 'expired' && (
@@ -1147,43 +1122,22 @@ export default function ChatRoom({
 
               {['met', 'finished'].includes(trip.status) && (
                 <>
-                  {/* 🔹 3,4번 요구사항: 기간이 끝났으면 안내 문구 변경 */}
                   <span className="text-emerald-900 font-medium">
-                    {tripIsOver
-                      ? // 여행은 끝났고, 이미 후기 작성한 상태
-                        (reviewEligible?.reason === 'ALREADY_REVIEWED'
-                          ? '동행이 종료 되었어요. 여행 후기를 이미 작성하셨네요!'
-                          : // 여행은 끝났지만 아직 후기 안 쓴 상태
-                            '동행이 종료 되었어요. 동행 후기를 남기시겠어요?')
-                      : // 아직 여행 기간 중이거나 바로 직후 → 기존 문구 유지
-                        '동행이 시작된 여행입니다.'}
+                    동행이 시작된 여행입니다.
                   </span>
-
-                  {/* 🔹 2번 요구사항: 동행 시작 이후에도 여행 기간 항상 보여주기 */}
-                  {trip.start_date && trip.end_date && (
-                    <span className="text-emerald-900/80 ml-2">
-                      기간: {trip.start_date.slice(0, 10)} ~ {trip.end_date.slice(0, 10)}
-                    </span>
-                  )}
-
-                  {/* 기존처럼 인증 시각은 그대로 유지 */}
-                  {trip.met_at && (
-                    <span className="text-emerald-900/80 ml-2">
-                      인증 시각:{' '}
-                      {formatKoreanDate(trip.met_at)}{' '}
-                      {new Date(trip.met_at).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+              
+                   {/* 여행 기간 표시 추가 */}
+                  {(trip.start_date || trip.end_date) && (
+                    <span className="text-emerald-900/80">
+                      여행기간: {trip.start_date?.slice(0, 10)} ~ {trip.end_date?.slice(0, 10)}
                     </span>
                   )}
                 </>
               )}
 
               {trip && (trip.status === 'met' || trip.status === 'finished') && (
-                <div className="mt-2 flex flex-col gap-2">
-                  {/* 기존에 있던 "동행이 시작된 여행입니다" 이런 문구/버튼들 그대로 두고, 그 밑에 추가 */}
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="mt-1 sm:mt-0 sm:ml-auto flex items-center justify-end gap-2 flex-1">
+
                     {reviewEligible?.canReview && (
                       <button
                         onClick={openReviewModal}
@@ -1193,16 +1147,19 @@ export default function ChatRoom({
                       </button>
                     )}
 
+                    {/* 이미 후기를 작성한 경우 → 오른쪽 정렬 + 위로 올림 */}
                     {!reviewEligible?.canReview &&
                       reviewEligible?.reason === 'ALREADY_REVIEWED' && (
-                        <span className="text-xs text-emerald-700">
-                          이미 후기를 작성해 주셨어요. 감사합니다!
+                        <span className="text-xs text-emerald-700 ml-auto self-start text-right leading-tight">
+                          이미 후기를 작성해 주셨어요.감사합니다!
                         </span>
                       )}
-                  </div>
+                  
+
                 </div>
               )}
-              
+                
+                
 
               {trip.status === 'cancelled' && (
                 <span className="text-emerald-800">
