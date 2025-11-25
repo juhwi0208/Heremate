@@ -7,8 +7,13 @@ import CountryCitySelect from '../../components/CountryCitySelect';
 import TravelRegions from '../../data/TravelRegions';
 import { buildPhotoProxyURL } from '../../lib/PlacesId';
 import UsePlacesAutocomplete from '../../lib/UsePlacesAutocomplete';
+// ✅ axios 인스턴스 추가
+import axios from '../../api/axiosInstance';
 
 const GOOGLE_LIBRARIES = ['places', 'marker'];
+
+// ✅ axios 기본 baseURL → /api/... 앞에 붙여 쓸 것
+const API_BASE = (axios.defaults.baseURL || '').replace(/\/$/, '');
 
 function normalizeOpeningHours(src) {
   if (!src) return null;
@@ -242,7 +247,7 @@ export default function Recommend() {
         // 1-B) 서버 폴백
         try {
           const resp = await fetch(
-            `/api/places/details?id=${encodeURIComponent(pid)}`
+            `${API_BASE}/api/places/details?id=${encodeURIComponent(pid)}`
           );
           if (resp.ok) {
             const det = await resp.json();
@@ -250,13 +255,16 @@ export default function Recommend() {
             // ✅ PlanEditor와 동일한 photoName → /api/places/photo 프록시 사용
             let photoUrl = '';
             if (det?.photoName) {
-              photoUrl = buildPhotoProxyURL({
+              const rel = buildPhotoProxyURL({
                 name: det.photoName,
                 w: 400,
                 h: 300,
               });
+              photoUrl = rel.startsWith('/') ? `${API_BASE}${rel}` : rel;
             } else if (det?.photoUrl) {
-              photoUrl = det.photoUrl;
+              photoUrl = det.photoUrl.startsWith('/')
+                ? `${API_BASE}${det.photoUrl}`
+                : det.photoUrl;
             }
 
             setDetailCache((prev) => ({
@@ -285,20 +293,23 @@ export default function Recommend() {
         // 2-A) 서버 디테일 먼저
         try {
           const resp = await fetch(
-            `/api/places/details?id=${encodeURIComponent(v1id)}`
+            `${API_BASE}/api/places/details?id=${encodeURIComponent(v1id)}`
           );
           if (resp.ok) {
             const det = await resp.json();
 
             let photoUrl = '';
             if (det?.photoName) {
-              photoUrl = buildPhotoProxyURL({
+              const rel = buildPhotoProxyURL({
                 name: det.photoName,
                 w: 400,
                 h: 300,
               });
+              photoUrl = rel.startsWith('/') ? `${API_BASE}${rel}` : rel;
             } else if (det?.photoUrl) {
-              photoUrl = det.photoUrl;
+              photoUrl = det.photoUrl.startsWith('/')
+                ? `${API_BASE}${det.photoUrl}`
+                : det.photoUrl;
             }
 
             setDetailCache((prev) => ({

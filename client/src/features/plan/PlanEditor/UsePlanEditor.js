@@ -157,6 +157,9 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
   const [resultsOpen, setResultsOpen] = useState(false);
   const [detailCache, setDetailCache] = useState({});
 
+  // ✅ axios 인스턴스의 baseURL을 썸네일 URL에도 같이 사용
+  const apiBase = (axios.defaults.baseURL || '').replace(/\/$/, '');
+
   useEffect(() => {
     if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     else delete axios.defaults.headers.common['Authorization'];
@@ -517,9 +520,18 @@ export default function usePlanEditor({ isEdit, isReadonly, planId, seed }) {
           const det = resp?.data;
           if (!det) return;
 
-          const viaProxy = det?.photoName
-            ? `/api/places/photo?name=${encodeURIComponent(det.photoName)}&w=320&h=240`
-            : det?.photoUrl || '';
+          let viaProxy = '';
+          if (det?.photoName) {
+            // ✅ 항상 백엔드 절대주소 + 프록시 경로로 만들기
+            viaProxy = `${apiBase}/api/places/photo?name=${encodeURIComponent(
+              det.photoName
+            )}&w=320&h=240`;
+          } else if (det?.photoUrl) {
+            // det.photoUrl 이 '/api/...' 같은 상대경로면 baseURL 붙여줌
+            viaProxy = det.photoUrl.startsWith('/')
+              ? `${apiBase}${det.photoUrl}`
+              : det.photoUrl;
+          }
 
           if (!isCancelled) {
             setDetailCache((prev) => ({
