@@ -18,11 +18,11 @@ exports.updateMe = async (req, res) => {
   const currentPassword = req.body.currentPassword ?? null;
   const file = req.file; // avatar
 
-  const avatarUrl = file ? `/uploads/avatars/${file.filename}` : null;
-  let conn;
+  const avatarUrl = file ? file.path : null;
+  let conn; 
 
   try {
-    const conn = await db.getConnection();
+    conn = await db.getConnection();
 
     // 이메일 변경 처리
     if (newEmail !== null) {

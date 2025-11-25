@@ -4,6 +4,8 @@ const path = require('path');
 const multer = require('multer');
 const db = require('../db');
 const { verifyToken } = require('../middlewares/auth');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 
 const router = express.Router();
 
@@ -11,9 +13,33 @@ const router = express.Router();
  * 업로드 설정
  * - 실제 경로: server/uploads/stories/...
  */
-const upload = multer({
-  dest: path.join(__dirname, '..', 'uploads', 'stories'),
+const storyStorage = new CloudinaryStorage({
+  cloudinary,
+  params: (req, file) => {
+    const isVideo = file.mimetype.startsWith('video/');
+    return {
+      folder: 'heremate/stories', // Cloudinary 폴더명
+      resource_type: isVideo ? 'video' : 'image',
+      allowed_formats: [
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'mp4',
+        'mov',
+        'avi',
+        'webm',
+        'mkv',
+      ],
+      // 이미지만 리사이즈, 영상은 원본 유지
+      transformation: isVideo
+        ? []
+        : [{ width: 1600, height: 900, crop: 'fill' }],
+    };
+  },
 });
+
+const upload = multer({ storage: storyStorage });
 
 /**
  * 내부 헬퍼: 스토리 리스트 조회
@@ -180,8 +206,10 @@ router.post(
             }
           : null;
 
+      const url = file.path; // Cloudinary CDN URL (예: https://res.cloudinary.com/...)
+
       return {
-        url: `/uploads/stories/${file.filename}`,
+        url,
         type: isVideo ? 'video' : 'image',
         index,
         caption,
