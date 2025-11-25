@@ -792,6 +792,9 @@ const collectPhotoCandidates = async () => {
     .filter((id) => !String(id).includes('/photos/'))   // ← 이거 한 줄
     .slice(0, 25);
 
+  
+  const apiBase = (axios.defaults.baseURL || '').replace(/\/$/, '');
+
   const Place = window.google?.maps?.places?.Place;
   const pick = (det) => {
     const p = det?.photos?.[0];
@@ -824,9 +827,20 @@ const collectPhotoCandidates = async () => {
         params: { id: pid.startsWith('places/') ? pid : `places/${pid}` },
       });
       const det = resp?.data;
-      const viaProxy = det?.photoName
-        ? `/api/places/photo?name=${encodeURIComponent(det.photoName)}&w=640&h=480`
-        : det?.photoUrl || '';
+
+      let viaProxy = '';
+      if (det?.photoName) {
+        // ✅ 항상 백엔드 절대주소 + 프록시 경로로 만들기
+        viaProxy = `${apiBase}/api/places/photo?name=${encodeURIComponent(
+          det.photoName
+        )}&w=640&h=480`;
+      } else if (det?.photoUrl) {
+        // det.photoUrl 이 /api/... 처럼 상대경로라면 baseURL 붙여줌
+        viaProxy = det.photoUrl.startsWith('/')
+          ? `${apiBase}${det.photoUrl}`
+          : det.photoUrl;
+      }
+
       if (viaProxy) urls.add(viaProxy);
     } catch {}
   }
