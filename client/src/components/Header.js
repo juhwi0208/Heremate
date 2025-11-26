@@ -16,120 +16,125 @@ const Header = ({ user, setUser, chatUnreadCount = 0, chatTripAlertCount = 0 }) 
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    setDropdownOpen(false);
+  const totalChatBadge = chatTripAlertCount || chatUnreadCount;
+
+  const handleLogoClick = () => {
     navigate('/');
   };
 
-  const hasUnread = Number(chatUnreadCount) > 0;
-  const hasTripAlert = Number(chatTripAlertCount) > 0;
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('token');
+    } catch (e) {
+      // ignore
+    }
+    if (setUser) setUser(null);
+    navigate('/');
+  };
 
-  const unreadLabel =
-    Number(chatUnreadCount) > 99 ? '99+' :
-    Number(chatUnreadCount) > 9 ? '9+' :
-    chatUnreadCount;
+  const navClass = ({ isActive }) =>
+    `px-3 py-1.5 rounded-full whitespace-nowrap text-sm transition
+     ${isActive
+       ? 'bg-emerald-600 text-white'
+       : 'text-gray-700 hover:bg-emerald-50'}`;
+
+  const renderNavItem = (item) => {
+    const isChat = item.to === '/chat';
+
+    return (
+      <NavLink key={item.to} to={item.to} className={navClass}>
+        <span className="inline-flex items-center gap-1">
+          {item.label}
+          {isChat && totalChatBadge > 0 && (
+            <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-[10px] text-white min-w-[16px] h-4 px-1">
+              {totalChatBadge}
+            </span>
+          )}
+        </span>
+      </NavLink>
+    );
+  };
 
   return (
-    // 🔹 헤더를 항상 맨 위 레이어로
-    <header className="relative z-30 flex justify-between items-center px-6 py-3 bg-white shadow">
-      <div
-        className="text-xl font-bold text-green-600 cursor-pointer"
-        onClick={() => navigate('/')}
-      >
-        HereMate
+    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-zinc-200">
+      {/* 상단 바 (로고 + 데스크톱 탭 + 유저/로그인 영역) */}
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        {/* 로고 / 타이틀 */}
+        <button
+          type="button"
+          onClick={handleLogoClick}
+          className="flex items-center gap-2"
+        >
+          <span className="text-emerald-600 font-black tracking-tight text-xl">
+            HereMate
+          </span>
+        </button>
+
+        {/* 데스크톱용 탭 (md 이상에서만 보이도록) */}
+        <nav className="hidden md:flex items-center gap-4 flex-1 justify-center">
+          {NAV.map(renderNavItem)}
+        </nav>
+
+        {/* 우측 유저 / 로그인 영역 */}
+        <div className="flex items-center gap-3">
+          {user ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setDropdownOpen((v) => !v)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-200 bg-white hover:bg-zinc-50 text-sm"
+              >
+                <span className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-xs text-emerald-700 font-semibold">
+                  {user.nickname?.[0] || '유'}
+                </span>
+                <span className="max-w-[80px] truncate text-gray-800">
+                  {user.nickname || '사용자'}
+                </span>
+              </button>
+
+              {dropdownOpen && (
+                // 🔹 드롭다운도 확실하게 위로
+                <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-md z-40">
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      navigate('/mypage');
+                    }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+                  >
+                    마이페이지
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      handleLogout();
+                    }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-600"
+                  >
+                    로그아웃
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex gap-4 text-sm">
+              <NavLink to="/login" className="text-gray-700 hover:text-green-600">
+                로그인
+              </NavLink>
+              <NavLink to="/signup" className="text-gray-700 hover:text-green-600">
+                회원가입
+              </NavLink>
+            </div>
+          )}
+        </div>
       </div>
 
-      <nav className="hidden md:flex gap-3 text-sm font-medium text-gray-700">
-        {NAV.map(({ to, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `px-3 py-2 rounded-md transition flex items-center
-               ${isActive ? 'bg-green-600 text-white shadow'
-                          : 'hover:bg-zinc-100'}`
-            }
-          >
-            {to === '/chat' ? (
-              <div className="relative flex items-center gap-1">
-                <span>내 채팅</span>
-
-                {/* 라이트 알림: 일반 채팅 미읽음 */}
-                {hasUnread && (
-                  <span
-                    className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1
-                               rounded-full text-[11px] font-semibold
-                               bg-emerald-500 text-white"
-                  >
-                    {unreadLabel}
-                  </span>
-                )}
-
-                {/* 헤비 알림: 메이트 확정 / 동행 시작 */}
-                {hasTripAlert && (
-                  <span
-                    className="ml-1 inline-flex items-center gap-1 px-2 py-[2px]
-                               rounded-full text-[10px] font-semibold
-                               bg-orange-100 text-orange-700
-                               shadow-sm animate-pulse"
-                  >
-                    <span className="inline-block w-2 h-2 rounded-full bg-orange-500" />
-                    TRIP
-                  </span>
-                )}
-              </div>
-            ) : (
-              label
-            )}
-          </NavLink>
-        ))}
+      {/* 🔻 모바일용 탭 바 (핸드폰에서만 보이게) */}
+      <nav className="md:hidden border-t border-zinc-100">
+        <div className="max-w-6xl mx-auto px-3 py-2 flex gap-2 overflow-x-auto no-scrollbar">
+          {NAV.map(renderNavItem)}
+        </div>
       </nav>
-
-      <div className="relative">
-        {user ? (
-          <div className="relative">
-            <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 text-sm text-gray-800 hover:text-green-600"
-            >
-              <img
-                src={user.avatarUrl || "/assets/avatar_placeholder.png"}
-                alt="프로필"
-                className="w-6 h-6 rounded-full object-cover border"
-              />
-              {user.nickname}
-            </button>
-
-            {dropdownOpen && (
-              // 🔹 드롭다운도 확실하게 위로
-              <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-md z-40">
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    navigate('/mypage');
-                  }}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
-                >
-                  마이페이지
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-500"
-                >
-                  로그아웃
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex gap-4 text-sm">
-            <NavLink to="/login" className="text-gray-700 hover:text-green-600">로그인</NavLink>
-            <NavLink to="/signup" className="text-gray-700 hover:text-green-600">회원가입</NavLink>
-          </div>
-        )}
-      </div>
     </header>
   );
 };
