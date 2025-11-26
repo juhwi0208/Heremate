@@ -29,21 +29,25 @@ const STYLE_COLOR = {
 };
 
 const TagChip = ({ label }) => (
-  <span className={`inline-flex items-center px-3 py-[6px] rounded-full text-[13px] font-medium ${STYLE_COLOR[label] || 'bg-slate-100 text-slate-800'}`}>
+  <span
+    className={`inline-flex items-center px-3 py-[6px] rounded-full text-[13px] font-medium ${
+      STYLE_COLOR[label] || 'bg-slate-100 text-slate-800'
+    }`}
+  >
     {label}
   </span>
 );
 
 const LineCalendar = ({ className = 'w-[18px] h-[18px] text-indigo-500' }) => (
   <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
-    <rect x="3" y="4" width="18" height="17" rx="3" stroke="currentColor" strokeWidth="1.4"/>
-    <path d="M8 2v4M16 2v4M3 9h18" stroke="currentColor" strokeWidth="1.4"/>
+    <rect x="3" y="4" width="18" height="17" rx="3" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M8 2v4M16 2v4M3 9h18" stroke="currentColor" strokeWidth="1.4" />
   </svg>
 );
 
 function formatRange(s, e) {
-  const S = (s || '').slice(0,10);
-  const E = (e || '').slice(0,10);
+  const S = (s || '').slice(0, 10);
+  const E = (e || '').slice(0, 10);
   if (!S || !E) return `${S} ~ ${E}`;
   return `${S.replace(/-/g, '.')} - ${E.slice(5).replace('-', '.')}`;
 }
@@ -74,12 +78,16 @@ export default function MateList() {
 
   const styleRef = useRef(null);
   useEffect(() => {
-    const onDoc = (e) => { if (styleRef.current && !styleRef.current.contains(e.target)) setOpenStyle(false); };
+    const onDoc = (e) => {
+      if (styleRef.current && !styleRef.current.contains(e.target)) setOpenStyle(false);
+    };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  useEffect(() => { fetchList(); }, []);
+  useEffect(() => {
+    fetchList();
+  }, []);
   const fetchList = async (params = {}) => {
     const { data } = await axios.get('/api/posts', { params });
     setPosts(data || []);
@@ -94,8 +102,8 @@ export default function MateList() {
     const arr = [...posts];
     if (sort === 'latest') {
       arr.sort((a, b) => {
-        const A = (a.created_at || a.start_date || '');
-        const B = (b.created_at || b.start_date || '');
+        const A = a.created_at || a.start_date || '';
+        const B = b.created_at || b.start_date || '';
         return A > B ? -1 : A < B ? 1 : 0;
       });
     } else {
@@ -116,12 +124,12 @@ export default function MateList() {
   };
 
   return (
-    <div className="bg-slate-50">
-      <div className="mx-auto max-w-[1200px] px-6 pt-8 pb-16">
+    <div className="bg-slate-50 min-h-screen">
+      <div className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-6 sm:pt-8 pb-16">
         {/* 헤더 — 우측 상단에 새 글 버튼 */}
-        <header className="mb-6 flex items-start md:items-center justify-between gap-3">
+        <header className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-[24px] leading-[30px] font-medium tracking-normal text-slate-900">
+            <h1 className="text-[22px] sm:text-[24px] leading-[30px] font-medium tracking-normal text-slate-900">
               여행 메이트 찾기
             </h1>
             <p className="mt-1.5 text-[13px] leading-[20px] text-slate-600">
@@ -130,18 +138,18 @@ export default function MateList() {
           </div>
           <button
             onClick={() => navigate('/mate/new')}
-            className="h-9 px-3 rounded-md bg-green-600 text-white text-[13px] font-medium hover:bg-green-700"
+            className="h-9 px-4 rounded-md bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 self-stretch sm:self-auto"
           >
             + 새 글 작성
           </button>
         </header>
 
-        {/* ✅ PlanFilters와 동일한 스타일의 필터 박스 */}
+        {/* ✅ 반응형 필터 박스 */}
         <section className="mb-8">
-          <div className="bg-white rounded-2xl shadow p-3 border hover:shadow-md transition">
-            <div className="grid grid-cols-12 gap-2 items-center">
-              {/* 여행 지역 (CountryCitySelect) - 4칸 */}
-              <div className="col-span-4">
+          <div className="bg-white rounded-2xl shadow p-4 border hover:shadow-md transition">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-end">
+              {/* 여행 지역 (CountryCitySelect) - 모바일: 전체폭, sm이상: 4칸 */}
+              <div className="col-span-1 sm:col-span-4">
                 <label className="block text-xs text-zinc-600 mb-1">여행 지역</label>
                 <CountryCitySelect
                   value={regionFilter}
@@ -150,32 +158,40 @@ export default function MateList() {
                 />
               </div>
 
-              {/* 시작일 - 2칸 */}
-              <div className="col-span-2">
+              {/* 시작일 - 모바일: 전체폭, sm이상: 2칸 */}
+              <div className="col-span-1 sm:col-span-2">
                 <label className="block text-xs text-zinc-600 mb-1">시작일</label>
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full border rounded-xl px-2 h-8 text-xs focus:ring-2 focus:ring-green-600 outline-none"
+                  className="w-full border rounded-xl px-2 h-9 text-xs focus:ring-2 focus:ring-green-600 outline-none"
                 />
               </div>
 
-              {/* 종료일 - 2칸 */}
-              <div className="col-span-2">
+              {/* 종료일 - 모바일: 전체폭, sm이상: 2칸 */}
+              <div className="col-span-1 sm:col-span-2">
                 <label className="block text-xs text-zinc-600 mb-1">종료일</label>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full border rounded-xl px-2 h-8 text-xs focus:ring-2 focus:ring-green-600 outline-none"
+                  className="w-full border rounded-xl px-2 h-9 text-xs focus:ring-2 focus:ring-green-600 outline-none"
                 />
               </div>
 
-              {/* 여행 취향 - 3칸 (PlanFilters 스타일) */}
-              <div className="col-span-3" ref={styleRef}>
+              {/* 여행 취향 - 모바일: 전체폭, sm이상: 3칸 */}
+              <div className="col-span-1 sm:col-span-3" ref={styleRef}>
                 <label className="block text-xs text-zinc-600 mb-1">여행 취향</label>
-                <div className="flex gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
+                <div
+                  className="
+                    flex gap-2
+                    overflow-x-auto sm:overflow-visible
+                    whitespace-nowrap sm:whitespace-normal
+                    no-scrollbar
+                    sm:flex-wrap
+                  "
+                >
                   {ALL_STYLES.map((s) => {
                     const on = styles.includes(s);
                     return (
@@ -187,7 +203,7 @@ export default function MateList() {
                           )
                         }
                         type="button"
-                        className={`px-3 h-8 text-xs rounded-full border transition ${
+                        className={`px-3 h-8 text-xs rounded-full border flex-shrink-0 transition ${
                           on
                             ? 'bg-green-600 text-white border-green-600'
                             : 'bg-white hover:bg-zinc-50'
@@ -200,19 +216,19 @@ export default function MateList() {
                 </div>
               </div>
 
-              {/* 초기화 + 정렬 - 1칸 (세로 스택) */}
-              <div className="col-span-1 flex flex-col gap-1 items-stretch justify-end">
+              {/* 초기화 + 정렬 - 모바일: 한 줄에 나란히, sm이상: 세로 스택 */}
+              <div className="col-span-1 sm:col-span-1 flex flex-row sm:flex-col gap-2 sm:gap-1 items-stretch justify-end">
                 <button
                   onClick={resetFilters}
                   type="button"
-                  className="w-full h-8 px-3 rounded-xl border text-zinc-700 hover:bg-zinc-50 text-xs"
+                  className="w-full h-9 px-3 rounded-xl border text-zinc-700 hover:bg-zinc-50 text-xs"
                 >
                   초기화
                 </button>
                 <select
                   value={sort}
                   onChange={(e) => setSort(e.target.value)}
-                  className="w-full h-8 px-2 rounded-xl border text-xs text-zinc-700 bg-white focus:ring-2 focus:ring-green-600 outline-none"
+                  className="w-full h-9 px-2 rounded-xl border text-xs text-zinc-700 bg-white focus:ring-2 focus:ring-green-600 outline-none"
                 >
                   <option value="latest">최신 등록</option>
                   <option value="travel_date">여행 날짜</option>
@@ -253,7 +269,12 @@ export default function MateList() {
 
               <p
                 className="text-[15px] leading-[23px] text-slate-700 mb-0"
-                style={{ display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 4,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
               >
                 {p.content}
               </p>
