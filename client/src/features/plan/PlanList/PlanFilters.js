@@ -1,4 +1,4 @@
-//client\src\features\plan\PlanList\PlanFilters.js
+// client/src/features/plan/PlanList/PlanFilters.js
 import React from 'react';
 import CountryCitySelect from '../../../components/CountryCitySelect';
 
@@ -23,7 +23,10 @@ export default function PlanFilters({
   prefs, setPrefs,
 }) {
   const togglePref = (k) =>
-    setPrefs((prev) => (prev.includes(k) ? prev.filter((p) => p !== k) : [...prev, k]));
+    setPrefs((prev) =>
+      prev.includes(k) ? prev.filter((p) => p !== k) : [...prev, k]
+    );
+
   const reset = () => {
     setCountry('');
     setRegion('');
@@ -32,7 +35,7 @@ export default function PlanFilters({
     setPrefs([]);
   };
 
-  // UI는 "1월~12월"을 보여주되, 값은 "YYYY-MM"으로 저장해서 백엔드(listSharedPlans)가 기대하는 형태 유지
+  // UI는 "1월~12월"을 보여주되, 값은 "YYYY-MM"으로 저장
   const yyyy = new Date().getFullYear();
   const setMonthWithYear = (setter) => (mm) => {
     if (!mm) return setter('');
@@ -42,10 +45,10 @@ export default function PlanFilters({
 
   return (
     <div className="bg-white rounded-2xl shadow p-3 border hover:shadow-md transition">
-      {/* 한 줄 그리드: 나라, 지역, 시작월, 끝월, 취향(가로 스크롤), 초기화 */}
-      <div className="grid grid-cols-12 gap-2 items-center">
+      {/* 📱 모바일: 세로 스택 / 💻 md 이상: 12컬럼 한 줄 */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-2 md:items-center">
         {/* 나라 / 지역 (2단 드롭다운) */}
-        <div className="col-span-4">
+        <div className="col-span-1 md:col-span-4">
           <label className="block text-xs text-zinc-600 mb-1">여행 지역</label>
           <CountryCitySelect
             value={country && region ? { countryName: country, cityName: region } : null}
@@ -58,7 +61,7 @@ export default function PlanFilters({
         </div>
 
         {/* 시작(월) */}
-        <div className="col-span-2">
+        <div className="col-span-1 md:col-span-2">
           <label className="block text-xs text-zinc-600 mb-1">시작(월)</label>
           <select
             value={extractMM(monthFrom)}
@@ -75,7 +78,7 @@ export default function PlanFilters({
         </div>
 
         {/* 끝(월) */}
-        <div className="col-span-2">
+        <div className="col-span-1 md:col-span-2">
           <label className="block text-xs text-zinc-600 mb-1">끝(월)</label>
           <select
             value={extractMM(monthTo)}
@@ -91,8 +94,8 @@ export default function PlanFilters({
           </select>
         </div>
 
-        {/* 여행 취향 (가로 스크롤로 한 줄 유지) */}
-        <div className="col-span-3">
+        {/* 여행 취향 (가로 스크롤) */}
+        <div className="col-span-1 md:col-span-3">
           <label className="block text-xs text-zinc-600 mb-1">여행 취향</label>
           <div className="flex gap-2 overflow-x-auto whitespace-nowrap no-scrollbar">
             {ALL_PREFS.map((p) => (
@@ -112,10 +115,10 @@ export default function PlanFilters({
         </div>
 
         {/* 초기화 */}
-        <div className="col-span-1 flex items-end">
+        <div className="col-span-1 md:col-span-1 flex md:items-end justify-end">
           <button
             onClick={reset}
-            className="w-full h-8 px-3 rounded-xl border text-zinc-700 hover:bg-zinc-50 text-xs"
+            className="w-full md:w-auto h-8 px-3 rounded-xl border text-zinc-700 hover:bg-zinc-50 text-xs"
           >
             초기화
           </button>

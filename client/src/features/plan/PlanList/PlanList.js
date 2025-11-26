@@ -275,7 +275,7 @@ export default function PlanList() {
       </div>
 
       {/* 필터 + 정렬 */}
-      <div className="flex items-start gap-3">
+      <div className="flex flex-col md:flex-row md:items-start gap-3">
         <div className="flex-1">
           <PlanFilters
             country={country} setCountry={setCountry}
@@ -285,7 +285,7 @@ export default function PlanList() {
             prefs={prefs} setPrefs={setPrefs}
           />
         </div>
-        <div className="w-44">
+        <div className="w-full md:w-44 md:self-end">
           <label className="block text-xs text-zinc-600 mb-1">정렬</label>
           <select
             value={sort}

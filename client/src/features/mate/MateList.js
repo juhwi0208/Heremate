@@ -4,28 +4,28 @@ import { useNavigate } from 'react-router-dom';
 import CountryCitySelect, { countryCityToLocation } from '../../components/CountryCitySelect';
 import axios from '../../api/axiosInstance';
 
-const ALL_STYLES = ['자연','맛집','사진','쇼핑','예술','역사','체험','축제','휴식'];
+const ALL_STYLES = ['자연', '맛집', '사진', '쇼핑', '예술', '역사', '체험', '축제', '휴식'];
 
 const API_BASE =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) ||
   process.env.REACT_APP_API_BASE_URL ||
-  "http://localhost:4000";
+  'http://localhost:4000';
 
 const toAbs = (u) => {
-  if (!u) return "";
-  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, "")}${u}`;
+  if (!u) return '';
+  return /^https?:\/\//.test(u) ? u : `${API_BASE.replace(/\/$/, '')}${u}`;
 };
 
 const STYLE_COLOR = {
-  '자연': 'bg-emerald-100 text-emerald-800',
-  '맛집': 'bg-rose-100 text-rose-800',
-  '사진': 'bg-violet-100 text-violet-800',
-  '쇼핑': 'bg-amber-100 text-amber-800',
-  '예술': 'bg-indigo-100 text-indigo-800',
-  '역사': 'bg-yellow-100 text-yellow-800',
-  '체험': 'bg-teal-100 text-teal-800',
-  '축제': 'bg-fuchsia-100 text-fuchsia-800',
-  '휴식': 'bg-slate-100 text-slate-800',
+  자연: 'bg-emerald-100 text-emerald-800',
+  맛집: 'bg-rose-100 text-rose-800',
+  사진: 'bg-violet-100 text-violet-800',
+  쇼핑: 'bg-amber-100 text-amber-800',
+  예술: 'bg-indigo-100 text-indigo-800',
+  역사: 'bg-yellow-100 text-yellow-800',
+  체험: 'bg-teal-100 text-teal-800',
+  축제: 'bg-fuchsia-100 text-fuchsia-800',
+  휴식: 'bg-slate-100 text-slate-800',
 };
 
 const TagChip = ({ label }) => (
@@ -58,7 +58,10 @@ function parseStyles(p) {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
   if (typeof raw === 'string') {
-    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    return raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
   return [];
 }
@@ -123,6 +126,17 @@ export default function MateList() {
     setEndDate('');
   };
 
+  const toggleStyle = (s) => {
+    setStyles((prev) => (prev.includes(s) ? prev.filter((v) => v !== s) : [...prev, s]));
+  };
+
+  const selectedLabel =
+    styles.length === 0
+      ? '전체 취향'
+      : styles.length === 1
+      ? styles[0]
+      : `${styles[0]} 외 ${styles.length - 1}`;
+
   return (
     <div className="bg-slate-50 min-h-screen">
       <div className="mx-auto max-w-[1200px] px-4 sm:px-6 pt-6 sm:pt-8 pb-16">
@@ -151,45 +165,39 @@ export default function MateList() {
               {/* 여행 지역 (CountryCitySelect) - 모바일: 전체폭, sm이상: 4칸 */}
               <div className="col-span-1 sm:col-span-4">
                 <label className="block text-xs text-zinc-600 mb-1">여행 지역</label>
-                <CountryCitySelect
-                  value={regionFilter}
-                  onChange={setRegionFilter}
-                  compact
-                />
+                <CountryCitySelect value={regionFilter} onChange={setRegionFilter} compact />
               </div>
 
-              {/* 시작일 - 모바일: 전체폭, sm이상: 2칸 */}
-              <div className="col-span-1 sm:col-span-2">
-                <label className="block text-xs text-zinc-600 mb-1">시작일</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full border rounded-xl px-2 h-9 text-xs focus:ring-2 focus:ring-green-600 outline-none"
-                />
+              {/* 여행 기간 (시작일 + 종료일 한 줄에) - 모바일/데스크탑 공통, sm이상: 4칸 */}
+              <div className="col-span-1 sm:col-span-4">
+                <label className="block text-xs text-zinc-600 mb-1">여행 기간</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-1/2 border rounded-xl px-2 h-9 text-xs focus:ring-2 focus:ring-green-600 outline-none"
+                  />
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-1/2 border rounded-xl px-2 h-9 text-xs focus:ring-2 focus:ring-green-600 outline-none"
+                  />
+                </div>
               </div>
 
-              {/* 종료일 - 모바일: 전체폭, sm이상: 2칸 */}
-              <div className="col-span-1 sm:col-span-2">
-                <label className="block text-xs text-zinc-600 mb-1">종료일</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full border rounded-xl px-2 h-9 text-xs focus:ring-2 focus:ring-green-600 outline-none"
-                />
-              </div>
-
-              {/* 여행 취향 - 모바일: 전체폭, sm이상: 3칸 */}
+              {/* 여행 취향 - 모바일: 가로 스크롤 태그, 데스크탑: 드롭다운 */}
               <div className="col-span-1 sm:col-span-3" ref={styleRef}>
                 <label className="block text-xs text-zinc-600 mb-1">여행 취향</label>
+
+                {/* 📱 모바일: 기존처럼 태그 버튼 가로 스크롤 */}
                 <div
                   className="
                     flex gap-2
-                    overflow-x-auto sm:overflow-visible
-                    whitespace-nowrap sm:whitespace-normal
+                    overflow-x-auto sm:hidden
+                    whitespace-nowrap
                     no-scrollbar
-                    sm:flex-wrap
                   "
                 >
                   {ALL_STYLES.map((s) => {
@@ -197,11 +205,7 @@ export default function MateList() {
                     return (
                       <button
                         key={s}
-                        onClick={() =>
-                          setStyles((prev) =>
-                            on ? prev.filter((v) => v !== s) : [...prev, s]
-                          )
-                        }
+                        onClick={() => toggleStyle(s)}
                         type="button"
                         className={`px-3 h-8 text-xs rounded-full border flex-shrink-0 transition ${
                           on
@@ -213,6 +217,44 @@ export default function MateList() {
                       </button>
                     );
                   })}
+                </div>
+
+                {/* 💻 데스크탑: 드롭다운 멀티 선택 */}
+                <div className="hidden sm:block relative">
+                  <button
+                    type="button"
+                    onClick={() => setOpenStyle((v) => !v)}
+                    className="w-full h-9 px-3 rounded-xl border text-xs text-zinc-700 bg-white flex items-center justify-between hover:bg-zinc-50"
+                  >
+                    <span className="truncate">{selectedLabel}</span>
+                    <span className="ml-2 text-[10px] text-zinc-500">
+                      {openStyle ? '닫기 ▲' : '선택 ▼'}
+                    </span>
+                  </button>
+
+                  {openStyle && (
+                    <div className="absolute z-20 mt-2 w-full bg-white border rounded-xl shadow-lg p-2">
+                      <div className="flex flex-wrap gap-2">
+                        {ALL_STYLES.map((s) => {
+                          const on = styles.includes(s);
+                          return (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() => toggleStyle(s)}
+                              className={`px-3 py-1 text-xs rounded-full border transition ${
+                                on
+                                  ? 'bg-green-600 text-white border-green-600'
+                                  : 'bg-white hover:bg-zinc-50'
+                              }`}
+                            >
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
