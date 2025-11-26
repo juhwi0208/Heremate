@@ -78,7 +78,7 @@ export default function ChatPage() {
             w-full md:w-[280px]
             border-b md:border-b-0 md:border-r
             flex-shrink-0
-            max-h-56 md:h-full
+            max-h-56 md:max-h-none md:h-full
             overflow-y-auto
           "
         >
