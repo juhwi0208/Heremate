@@ -65,10 +65,23 @@ export default function ChatPage() {
     : null;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-4">
-      <div className="bg-white rounded-xl shadow-sm border flex h-[calc(100vh-6rem)] min-h-[520px]">
+    <div className="max-w-6xl mx-auto px-2 sm:px-4 py-3">
+      <div
+        className="bg-white rounded-xl shadow-sm border
+                  flex flex-col md:flex-row
+                  h-[calc(100vh-6rem)] min-h-[520px]
+                  overflow-hidden"
+      >
         {/* 사이드바 */}
-        <aside className="w-[280px] border-r flex-shrink-0">
+        <aside
+          className="
+            w-full md:w-[280px]
+            border-b md:border-b-0 md:border-r
+            flex-shrink-0
+            max-h-56 md:h-full
+            overflow-y-auto
+          "
+        >
           <ChatSidebarList
             rooms={rooms}
             loading={roomsLoading}
@@ -78,7 +91,7 @@ export default function ChatPage() {
         </aside>
 
         {/* 채팅방 영역 */}
-        <section className="flex-1 flex flex-col">
+        <section className="flex-1 flex flex-col min-h-0">
           {currentIdNum ? (
             <ChatRoom
               key={currentIdNum}        // 다른 방으로 갈 때 강제 재마운트
