@@ -12,10 +12,11 @@ const NAV = [
 
 // 🔹 chatUnreadCount: 일반 채팅 미읽음 개수
 // 🔹 chatTripAlertCount: 메이트 확정/동행 시작 관련 알림 개수
-const Header = ({ user, setUser, chatUnreadCount = 0, chatTripAlertCount = 0 }) => {
+function Header({ user, setUser, chatUnreadCount = 0, chatTripAlertCount = 0 }) {
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  // 채팅 뱃지: 트립 알림 있으면 그게 우선, 없으면 일반 미읽음
   const totalChatBadge = chatTripAlertCount || chatUnreadCount;
 
   const handleLogoClick = () => {
@@ -55,6 +56,18 @@ const Header = ({ user, setUser, chatUnreadCount = 0, chatTripAlertCount = 0 }) 
     );
   };
 
+  const nicknameInitial = (user?.nickname || '유')[0];
+
+  // 🔹 avatarUrl 우선, 혹시 모를 snake_case / 파일명 케이스도 방어
+  const avatarSrc =
+    user?.avatarUrl ||
+    user?.avatar_url ||
+    (typeof user?.avatar === 'string'
+      ? (user.avatar.startsWith('http')
+          ? user.avatar
+          : `/uploads/avatars/${user.avatar}`)
+      : '');
+
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-zinc-200">
       {/* 상단 바 (로고 + 데스크톱 탭 + 유저/로그인 영역) */}
@@ -84,16 +97,26 @@ const Header = ({ user, setUser, chatUnreadCount = 0, chatTripAlertCount = 0 }) 
                 onClick={() => setDropdownOpen((v) => !v)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-200 bg-white hover:bg-zinc-50 text-sm"
               >
-                <span className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-xs text-emerald-700 font-semibold">
-                  {user.nickname?.[0] || '유'}
-                </span>
+                {/* 🔹 프로필 사진: 있으면 이미지, 없으면 이니셜 동그라미 */}
+                {avatarSrc ? (
+                  <img
+                    src={avatarSrc}
+                    alt={user.nickname || '프로필'}
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-xs text-emerald-700 font-semibold">
+                    {nicknameInitial}
+                  </span>
+                )}
+
                 <span className="max-w-[80px] truncate text-gray-800">
                   {user.nickname || '사용자'}
                 </span>
               </button>
 
               {dropdownOpen && (
-                // 🔹 드롭다운도 확실하게 위로
+                // 🔹 드롭다운은 항상 헤더 위에 뜨게 z-40
                 <div className="absolute right-0 mt-2 w-40 bg-white border rounded-md shadow-md z-40">
                   <button
                     onClick={() => {
@@ -137,6 +160,6 @@ const Header = ({ user, setUser, chatUnreadCount = 0, chatTripAlertCount = 0 }) 
       </nav>
     </header>
   );
-};
+}
 
 export default Header;
