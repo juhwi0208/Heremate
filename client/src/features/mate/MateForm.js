@@ -22,12 +22,16 @@ export default function MateForm() {
   const [startType, setStartType] = useState('text');
   const [endType, setEndType] = useState('text');
 
+  // ✅ 추가: 중복 제출 방지용
+  const [submitting, setSubmitting] = useState(false);
+
   const TITLE_MAX = 100;
   const CONTENT_MAX = 1000;
 
   const canSubmit = useMemo(() => {
-    return title.trim() && startDate && endDate && countryCityToLocation(region) && styles.length > 0;
-  }, [title, startDate, endDate, region, styles]);
+    
+    return !submitting && title.trim() && startDate && endDate && countryCityToLocation(region) && styles.length > 0;
+  }, [title, startDate, endDate, region, styles, submitting]);
 
   const toggleStyle = (v) => {
     setStyles((prev) => {
@@ -40,7 +44,12 @@ export default function MateForm() {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    
     if (!canSubmit) return;
+
+    // ✅ 2차 방어: 아주 짧은 타이밍에도 중복 호출 막기
+    if (submitting) return;
+    setSubmitting(true);
 
     try {
       await axios.post('/api/posts', {
@@ -237,7 +246,7 @@ export default function MateForm() {
                   : 'bg-emerald-200 text-white/80 cursor-not-allowed',
               ].join(' ')}
             >
-              ✈️ 게시글 등록하기
+              {submitting ? '등록 중...' : '✈️ 게시글 등록하기'}
             </button>
           </div>
         </form>
